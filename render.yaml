@@ -1,0 +1,43 @@
+# Render blueprint for the CDS backend (Docker).
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: cds-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: LINK_SIGNING_SECRET
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_DOMAIN
+        value: ""
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64
+        sync: false
+      - key: GOOGLE_DRIVE_ROOT_FOLDER_ID
+        sync: false
+      - key: BOOTSTRAP_SUPER_ADMIN_EMAIL
+        sync: false

@@ -1,0 +1,20 @@
+{
+  "name": "content-delivery-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Content Delivery System - secure content distribution platform (monorepo)",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace backend run dev",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "build": "npm --workspace backend run build && npm --workspace frontend run build",
+    "typecheck": "npm --workspace backend run typecheck && npm --workspace frontend run typecheck",
+    "test": "npm --workspace backend run test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

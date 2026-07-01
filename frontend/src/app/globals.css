@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background-color: #ffffff;
+  color: #111111;
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Consistent focus ring without colourful accents. */
+:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 1px;
+}
+
+table {
+  border-collapse: collapse;
+}
