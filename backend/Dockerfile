@@ -4,9 +4,9 @@ WORKDIR /app
 
 # Install dependencies (including dev) for the build.
 COPY package.json package-lock.json* ./
+COPY prisma ./prisma
 RUN npm install --no-audit --no-fund
 
-COPY prisma ./prisma
 COPY tsconfig.json ./
 COPY src ./src
 
