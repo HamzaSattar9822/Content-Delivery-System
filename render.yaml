@@ -1,5 +1,8 @@
 # Render blueprint for the CDS backend (Docker).
 # Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy via Blueprint so generateValue secrets are created automatically.
+# After deploy, set FRONTEND_URL to your Vercel URL in the Render dashboard.
 services:
   - type: web
     name: cds-backend
@@ -13,8 +16,13 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
+      # Auto-set to this service's public hostname (https:// added at runtime).
       - key: APP_URL
-        sync: false
+        fromService:
+          type: web
+          name: cds-backend
+          property: host
+      # Set to your Vercel frontend URL during blueprint setup, e.g. https://your-app.vercel.app
       - key: FRONTEND_URL
         sync: false
       - key: JWT_ACCESS_SECRET
@@ -27,6 +35,7 @@ services:
         value: "true"
       - key: COOKIE_DOMAIN
         value: ""
+      # Usually same as FRONTEND_URL; used if FRONTEND_URL is omitted.
       - key: CORS_ORIGINS
         sync: false
       - key: GOOGLE_CLIENT_ID

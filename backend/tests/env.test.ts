@@ -43,4 +43,17 @@ describe('env URL coercion', () => {
     const { env } = await import('../src/config/env');
     expect(env.LINK_SIGNING_SECRET).toBe('test-refresh-secret-12345678');
   });
+
+  it('ignores empty APP_URL so RENDER_EXTERNAL_URL is used', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('DATABASE_URL', 'postgresql://u:p@localhost:5432/db');
+    vi.stubEnv('JWT_ACCESS_SECRET', 'test-access-secret-12345678');
+    vi.stubEnv('JWT_REFRESH_SECRET', 'test-refresh-secret-12345678');
+    vi.stubEnv('APP_URL', '   ');
+    vi.stubEnv('FRONTEND_URL', 'https://cds.example.com');
+    vi.stubEnv('RENDER_EXTERNAL_URL', 'https://cds-backend.onrender.com');
+
+    const { env } = await import('../src/config/env');
+    expect(env.APP_URL).toBe('https://cds-backend.onrender.com');
+  });
 });

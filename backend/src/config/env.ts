@@ -13,14 +13,25 @@ function coerceEnvUrl(value?: string): string | undefined {
   return `https://${trimmed}`;
 }
 
+/** Drop empty Render dashboard placeholders so fallbacks and Zod defaults apply. */
+function stripEmptyEnv(source: NodeJS.ProcessEnv): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined && value.trim() !== '') {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 /** Normalize Render/platform env before Zod validation. */
 function buildProcessEnv(): NodeJS.ProcessEnv {
-  const source = { ...process.env };
+  const source = stripEmptyEnv(process.env);
 
   const appUrl = coerceEnvUrl(source.APP_URL) ?? coerceEnvUrl(source.RENDER_EXTERNAL_URL);
 
   let frontendUrl = coerceEnvUrl(source.FRONTEND_URL);
-  if (!frontendUrl && source.CORS_ORIGINS?.trim()) {
+  if (!frontendUrl && source.CORS_ORIGINS) {
     const firstOrigin = source.CORS_ORIGINS.split(',')[0]?.trim();
     frontendUrl = coerceEnvUrl(firstOrigin);
   }
@@ -30,12 +41,15 @@ function buildProcessEnv(): NodeJS.ProcessEnv {
     source.JWT_REFRESH_SECRET?.trim() ||
     source.JWT_ACCESS_SECRET?.trim();
 
-  return {
-    ...source,
-    ...(appUrl ? { APP_URL: appUrl } : {}),
-    ...(frontendUrl ? { FRONTEND_URL: frontendUrl } : {}),
-    ...(linkSigningSecret ? { LINK_SIGNING_SECRET: linkSigningSecret } : {}),
-  };
+  const merged: NodeJS.ProcessEnv = { ...source };
+  if (appUrl) merged.APP_URL = appUrl;
+  else delete merged.APP_URL;
+  if (frontendUrl) merged.FRONTEND_URL = frontendUrl;
+  else delete merged.FRONTEND_URL;
+  if (linkSigningSecret) merged.LINK_SIGNING_SECRET = linkSigningSecret;
+  else delete merged.LINK_SIGNING_SECRET;
+
+  return merged;
 }
 
 const booleanString = z
@@ -83,15 +97,19 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(buildProcessEnv());
 
 if (!parsed.success) {
+  const missing = Object.keys(parsed.error.flatten().fieldErrors);
   // eslint-disable-next-line no-console
   console.error('Invalid environment configuration:');
   // eslint-disable-next-line no-console
   console.error(parsed.error.flatten().fieldErrors);
   // eslint-disable-next-line no-console
   console.error(
-    'Render tip: set FRONTEND_URL to your Vercel URL (e.g. https://your-app.vercel.app). ' +
-      'APP_URL is auto-filled from RENDER_EXTERNAL_URL when omitted. ' +
-      'LINK_SIGNING_SECRET can match JWT_REFRESH_SECRET or be set explicitly.',
+    [
+      'Render: env vars are set in the dashboard (not from .env in the Docker image).',
+      'Required: DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, FRONTEND_URL.',
+      'Optional: APP_URL (auto from RENDER_EXTERNAL_URL), LINK_SIGNING_SECRET (falls back to JWT secret).',
+      `Missing or invalid: ${missing.join(', ')}`,
+    ].join('\n'),
   );
   throw new Error('Environment validation failed. See logs above.');
 }
@@ -149,5 +167,12 @@ export const env = {
   smtpConfigured: Boolean(raw.SMTP_HOST && raw.SMTP_USER),
   googleOauthConfigured: Boolean(raw.GOOGLE_CLIENT_ID && raw.GOOGLE_CLIENT_SECRET),
 };
+
+if (raw.NODE_ENV === 'production') {
+  // eslint-disable-next-line no-console
+  console.info(
+    `[cds] env loaded: APP_URL=${appUrl} FRONTEND_URL=${frontendUrl} DATABASE_URL=set JWT=set`,
+  );
+}
 
 export type AppEnv = typeof env;
