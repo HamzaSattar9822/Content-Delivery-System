@@ -21,6 +21,8 @@ export const linkController = {
       id: result.link.id,
       token: result.token,
       watchUrl: result.watchUrl,
+      embedUrl: result.embedUrl,
+      embedCode: result.embedCode,
       link: { ...result.link, tokenHash: undefined },
     });
   },

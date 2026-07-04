@@ -36,6 +36,7 @@ function CreateLinkForm() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
 
   useEffect(() => {
     api
@@ -90,17 +91,42 @@ function CreateLinkForm() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const copyEmbed = async () => {
+    if (!created) return;
+    await navigator.clipboard.writeText(created.embedCode);
+    setCopiedEmbed(true);
+    setTimeout(() => setCopiedEmbed(false), 1500);
+  };
+
   if (created) {
     return (
       <div>
-        <PageHeader title="Delivery Link Created" description="Copy this link now. The token is shown only once." />
+        <PageHeader
+          title="Delivery Link Created"
+          description="Copy the watch URL and embed code now. The token is shown only once."
+        />
         <Card className="p-4 max-w-2xl">
-          <Banner>This is the only time the full link is displayed. Store it securely.</Banner>
-          <Field label="Secure watch URL">
+          <Banner>
+            This is the only time the full link and embed code are displayed. Store them securely.
+          </Banner>
+          <Field label="Secure watch URL" hint="Open directly in a browser.">
             <Input readOnly value={created.watchUrl} onFocus={(e) => e.currentTarget.select()} />
           </Field>
-          <div className="flex gap-2 mt-3">
+          <Field
+            label="Embed code"
+            hint="Paste this iframe HTML into your client's LMS or course page (like Livid). Set domain allowlist to their LMS hostname to restrict playback."
+          >
+            <textarea
+              readOnly
+              value={created.embedCode}
+              onFocus={(e) => e.currentTarget.select()}
+              rows={5}
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm font-mono text-ink"
+            />
+          </Field>
+          <div className="flex flex-wrap gap-2 mt-3">
             <Button onClick={copy}>{copied ? 'Copied' : 'Copy link'}</Button>
+            <Button onClick={copyEmbed}>{copiedEmbed ? 'Copied' : 'Copy embed code'}</Button>
             <Link href="/links">
               <Button variant="secondary">Go to Link Management</Button>
             </Link>

@@ -1,8 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { Banner, Button, Card, Field, Input, Spinner } from '@/components/ui';
 
@@ -51,8 +51,24 @@ const STATUS_MESSAGES: Record<string, string> = {
 };
 
 export default function WatchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-white">
+          <Spinner />
+        </div>
+      }
+    >
+      <WatchPageContent />
+    </Suspense>
+  );
+}
+
+function WatchPageContent() {
   const params = useParams<{ token: string }>();
+  const searchParams = useSearchParams();
   const token = params.token;
+  const isEmbed = searchParams.get('embed') === '1';
 
   const [resolved, setResolved] = useState<ResolveResponse | null>(null);
   const [access, setAccess] = useState<AccessResponse | null>(null);
@@ -92,19 +108,24 @@ export default function WatchPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className={`min-h-screen flex items-center justify-center ${isEmbed ? 'bg-black' : 'bg-white'}`}>
         <Spinner />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col" onContextMenu={(e) => e.preventDefault()}>
-      <header className="border-b border-line px-4 py-3">
-        <span className="text-sm font-semibold text-ink">Content Delivery System</span>
-      </header>
+    <div
+      className={`min-h-screen flex flex-col ${isEmbed ? 'bg-black' : 'bg-white'}`}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {!isEmbed && (
+        <header className="border-b border-line px-4 py-3">
+          <span className="text-sm font-semibold text-ink">Content Delivery System</span>
+        </header>
+      )}
 
-      <main className="flex-1 w-full max-w-4xl mx-auto p-4 md:p-8">
+      <main className={`flex-1 w-full ${isEmbed ? 'p-0' : 'max-w-4xl mx-auto p-4 md:p-8'}`}>
         {resolved && resolved.status !== 'ACTIVE' && (
           <Card className="p-8 text-center">
             <h1 className="text-lg font-semibold text-ink mb-2">Access Unavailable</h1>
@@ -113,7 +134,7 @@ export default function WatchPage() {
         )}
 
         {resolved && resolved.status === 'ACTIVE' && resolved.requiresPassword && !access && (
-          <Card className="p-6 max-w-md mx-auto">
+          <Card className={`p-6 max-w-md ${isEmbed ? 'mx-auto mt-4' : 'mx-auto'}`}>
             <h1 className="text-base font-semibold text-ink mb-1">{resolved.content.title}</h1>
             <p className="text-sm text-muted mb-4">This content is password protected.</p>
             {error && <Banner tone="error">{error}</Banner>}
@@ -141,16 +162,22 @@ export default function WatchPage() {
         )}
 
         {access && (
-          <div>
-            <h1 className="text-lg font-semibold text-ink mb-1">{access.content.title}</h1>
-            {access.content.description && <p className="text-sm text-muted mb-4">{access.content.description}</p>}
+          <div className={isEmbed ? 'h-full' : undefined}>
+            {!isEmbed && (
+              <>
+                <h1 className="text-lg font-semibold text-ink mb-1">{access.content.title}</h1>
+                {access.content.description && <p className="text-sm text-muted mb-4">{access.content.description}</p>}
+              </>
+            )}
 
-            <ContentViewer token={token} access={access} />
+            <ContentViewer token={token} access={access} embed={isEmbed} />
 
-            <div className="flex flex-wrap gap-4 mt-3 text-xs text-muted">
-              {access.remainingViews != null && <span>Remaining views: {access.remainingViews}</span>}
-              {access.expiresAt && <span>Expires: {new Date(access.expiresAt).toLocaleString()}</span>}
-            </div>
+            {!isEmbed && (
+              <div className="flex flex-wrap gap-4 mt-3 text-xs text-muted">
+                {access.remainingViews != null && <span>Remaining views: {access.remainingViews}</span>}
+                {access.expiresAt && <span>Expires: {new Date(access.expiresAt).toLocaleString()}</span>}
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -158,7 +185,15 @@ export default function WatchPage() {
   );
 }
 
-function ContentViewer({ token, access }: { token: string; access: AccessResponse }) {
+function ContentViewer({
+  token,
+  access,
+  embed = false,
+}: {
+  token: string;
+  access: AccessResponse;
+  embed?: boolean;
+}) {
   const { fileType, mimeType } = access.content;
   const src = access.streamUrl;
 
@@ -195,12 +230,22 @@ function ContentViewer({ token, access }: { token: string; access: AccessRespons
   if (fileType === 'IMAGE') {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} alt={access.content.title} className="w-full border border-line rounded" />
+      <img
+        src={src}
+        alt={access.content.title}
+        className={embed ? 'w-full h-full object-contain' : 'w-full border border-line rounded'}
+      />
     );
   }
 
   if (fileType === 'PDF' || mimeType === 'application/pdf') {
-    return <iframe src={src} title={access.content.title} className="w-full border border-line rounded h-[80vh]" />;
+    return (
+      <iframe
+        src={src}
+        title={access.content.title}
+        className={embed ? 'w-full h-screen border-0' : 'w-full border border-line rounded h-[80vh]'}
+      />
+    );
   }
 
   return (

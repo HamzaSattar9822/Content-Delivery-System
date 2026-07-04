@@ -90,6 +90,8 @@ export interface CreatedLinkResponse {
   id: string;
   token: string;
   watchUrl: string;
+  embedUrl: string;
+  embedCode: string;
   link: AccessLink;
 }
 

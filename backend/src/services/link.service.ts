@@ -26,6 +26,8 @@ export interface CreatedLink {
   link: Awaited<ReturnType<AccessLinkRepository['create']>>;
   token: string;
   watchUrl: string;
+  embedUrl: string;
+  embedCode: string;
 }
 
 export class LinkService {
@@ -37,6 +39,15 @@ export class LinkService {
 
   buildWatchUrl(token: string): string {
     return `${env.FRONTEND_URL}/watch/${token}`;
+  }
+
+  buildEmbedUrl(token: string): string {
+    return `${this.buildWatchUrl(token)}?embed=1`;
+  }
+
+  buildEmbedCode(token: string): string {
+    const src = this.buildEmbedUrl(token);
+    return `<iframe src="${src}" width="100%" height="500" style="border:0;" allow="fullscreen; autoplay; encrypted-media" allowfullscreen></iframe>`;
   }
 
   async list(query: Record<string, unknown>) {
@@ -98,7 +109,13 @@ export class LinkService {
     });
 
     // The raw token is returned exactly once; only its hash is persisted.
-    return { link, token, watchUrl: this.buildWatchUrl(token) };
+    return {
+      link,
+      token,
+      watchUrl: this.buildWatchUrl(token),
+      embedUrl: this.buildEmbedUrl(token),
+      embedCode: this.buildEmbedCode(token),
+    };
   }
 
   async update(id: string, input: Partial<CreateLinkInput>, ctx: AuditContext) {

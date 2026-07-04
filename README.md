@@ -8,7 +8,7 @@ The architecture is generic (CMS-ready) — videos, PDFs, DOCX, PPTX, images, au
 
 - **Secure delivery links** with cryptographically random tokens (only the SHA-256 hash is stored).
 - **Access enforcement engine**: expiration (date/time or never), max views, max sessions, max devices, max concurrent users, optional password, IP allowlist and domain allowlist.
-- **Streaming proxy** that pipes Google Drive content through the backend with HTTP `Range` / partial-content support — raw Drive URLs are never exposed. Works on desktop, mobile and in LMS/iframe embeds.
+- **LMS embed codes**: each delivery link returns a unique iframe embed snippet (Livid-style) plus the watch URL — paste into any course site for in-page playback with full CDS player controls. Optional domain allowlist locks embeds to the client's LMS hostname.
 - **RBAC**: `SUPER_ADMIN`, `CONTENT_MANAGER`, `READ_ONLY`, enforced by permission middleware.
 - **Google integration**: Google OAuth login + Google Drive browsing/metadata sync.
 - **Analytics**: views, unique/repeat viewers, sessions, watch duration, completion rate, device/browser/country breakdowns.
@@ -125,6 +125,16 @@ cd backend && npm test
 ```
 
 Covers the access-enforcement engine (expiration, view/device/session/concurrency limits, password, IP/domain allowlists), notification thresholds, token/grant cryptography, RBAC mapping, pagination and the API surface (auth, validation, error handling).
+
+### LMS embed handoff
+
+1. Create a delivery link for the video in **Links → Create**.
+2. Set **Domain allowlist** to the client's LMS hostname (e.g. `courses.client.com`) if you want playback restricted to their site.
+3. Copy the **embed code** (iframe HTML) from the success screen and send it to the client.
+4. Client pastes the embed code into their LMS HTML/embed block — the video plays inside their course with CDS player controls.
+5. The **watch URL** is for direct browser access; the embed URL uses `?embed=1` for a player-only view inside iframes.
+
+Production embeds require HTTPS on your deployed frontend (`FRONTEND_URL`).
 
 ## Production deployment (VPS)
 
