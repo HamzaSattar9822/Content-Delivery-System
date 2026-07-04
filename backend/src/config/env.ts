@@ -4,6 +4,40 @@ import { z } from 'zod';
  * Centralised, validated environment configuration.
  * The process fails fast at boot if required variables are missing.
  */
+
+/** Accept full URLs or bare hostnames (common in Render/Vercel dashboards). */
+function coerceEnvUrl(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+/** Normalize Render/platform env before Zod validation. */
+function buildProcessEnv(): NodeJS.ProcessEnv {
+  const source = { ...process.env };
+
+  const appUrl = coerceEnvUrl(source.APP_URL) ?? coerceEnvUrl(source.RENDER_EXTERNAL_URL);
+
+  let frontendUrl = coerceEnvUrl(source.FRONTEND_URL);
+  if (!frontendUrl && source.CORS_ORIGINS?.trim()) {
+    const firstOrigin = source.CORS_ORIGINS.split(',')[0]?.trim();
+    frontendUrl = coerceEnvUrl(firstOrigin);
+  }
+
+  const linkSigningSecret =
+    source.LINK_SIGNING_SECRET?.trim() ||
+    source.JWT_REFRESH_SECRET?.trim() ||
+    source.JWT_ACCESS_SECRET?.trim();
+
+  return {
+    ...source,
+    ...(appUrl ? { APP_URL: appUrl } : {}),
+    ...(frontendUrl ? { FRONTEND_URL: frontendUrl } : {}),
+    ...(linkSigningSecret ? { LINK_SIGNING_SECRET: linkSigningSecret } : {}),
+  };
+}
+
 const booleanString = z
   .string()
   .transform((v) => v === 'true' || v === '1')
@@ -46,13 +80,19 @@ const envSchema = z.object({
   BOOTSTRAP_SUPER_ADMIN_EMAIL: z.string().optional().default(''),
 });
 
-const parsed = envSchema.safeParse(process.env);
+const parsed = envSchema.safeParse(buildProcessEnv());
 
 if (!parsed.success) {
   // eslint-disable-next-line no-console
   console.error('Invalid environment configuration:');
   // eslint-disable-next-line no-console
   console.error(parsed.error.flatten().fieldErrors);
+  // eslint-disable-next-line no-console
+  console.error(
+    'Render tip: set FRONTEND_URL to your Vercel URL (e.g. https://your-app.vercel.app). ' +
+      'APP_URL is auto-filled from RENDER_EXTERNAL_URL when omitted. ' +
+      'LINK_SIGNING_SECRET can match JWT_REFRESH_SECRET or be set explicitly.',
+  );
   throw new Error('Environment validation failed. See logs above.');
 }
 
@@ -88,7 +128,10 @@ if (raw.NODE_ENV === 'production') {
     productionIssues.push('COOKIE_SECURE must be true in production (HTTPS required)');
   }
   if (productionIssues.length > 0) {
-    throw new Error(`Production environment misconfiguration:\n- ${productionIssues.join('\n- ')}`);
+    throw new Error(
+      `Production environment misconfiguration:\n- ${productionIssues.join('\n- ')}\n` +
+        'Set APP_URL / FRONTEND_URL in Render (or rely on RENDER_EXTERNAL_URL + CORS_ORIGINS for APP_URL).',
+    );
   }
 }
 
