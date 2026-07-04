@@ -2,6 +2,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Prisma engines require OpenSSL on Alpine (migrate deploy at runtime).
+RUN apk add --no-cache openssl libc6-compat
+
 # Install dependencies (including dev) for the build.
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
@@ -21,7 +24,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init openssl libc6-compat
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
