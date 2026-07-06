@@ -90,11 +90,20 @@ export class AuthService {
   ): Promise<{ user: AuthUser; tokens: AuthTokens }> {
     const email = input.email.trim().toLowerCase();
     const existing = await this.userRepo.findByEmail(email);
+    const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
+
+    // Seeded or OAuth-only users may exist without a password — let them set one via sign-up.
     if (existing) {
-      throw new ConflictError('An account with this email already exists. Sign in instead.');
+      if (existing.passwordHash) {
+        throw new ConflictError('An account with this email already exists. Sign in instead.');
+      }
+      await this.userRepo.update(existing.id, {
+        passwordHash,
+        name: input.name?.trim() || existing.name,
+      });
+      return this.completeLogin(existing.id, ctx);
     }
 
-    const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
     const roleName = this.defaultRoleForEmail(email);
     const role = await this.roleRepo.findByName(roleName);
     if (!role) throw new BadRequestError('Roles are not seeded. Run the database seed first.');
@@ -126,8 +135,13 @@ export class AuthService {
   ): Promise<{ user: AuthUser; tokens: AuthTokens }> {
     const email = input.email.trim().toLowerCase();
     const user = await this.userRepo.findByEmail(email);
-    if (!user || !user.passwordHash) {
+    if (!user) {
       throw new UnauthorizedError('Invalid email or password');
+    }
+    if (!user.passwordHash) {
+      throw new UnauthorizedError(
+        'No password is set for this account. Use Sign up with this email to create a password.',
+      );
     }
 
     const valid = await bcrypt.compare(input.password, user.passwordHash);

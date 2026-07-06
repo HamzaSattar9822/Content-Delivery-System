@@ -49,17 +49,12 @@ async function seedRoles() {
 async function seedSuperAdmin() {
   const email = process.env.BOOTSTRAP_SUPER_ADMIN_EMAIL;
   if (!email) {
-    console.log('BOOTSTRAP_SUPER_ADMIN_EMAIL not set; skipping super admin seed');
+    console.log('BOOTSTRAP_SUPER_ADMIN_EMAIL not set; skipping super admin hint');
     return;
   }
-  const role = await prisma.role.findUnique({ where: { name: ROLES.SUPER_ADMIN } });
-  if (!role) return;
-  await prisma.user.upsert({
-    where: { email },
-    update: { roleId: role.id },
-    create: { email, name: 'Super Admin', roleId: role.id },
-  });
-  console.log(`Seeded super admin: ${email}`);
+  // Do not create a passwordless user here — sign up with this email to set a password
+  // and receive SUPER_ADMIN via defaultRoleForEmail in auth.service.ts.
+  console.log(`Bootstrap admin email: ${email} (sign up with this email to create the account)`);
 }
 
 async function seedSampleData() {

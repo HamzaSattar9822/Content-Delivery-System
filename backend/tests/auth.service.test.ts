@@ -77,7 +77,7 @@ describe('AuthService', () => {
   });
 
   it('rejects signup when email already exists', async () => {
-    userRepo.findByEmail.mockResolvedValue({ id: 'existing' });
+    userRepo.findByEmail.mockResolvedValue({ id: 'existing', passwordHash: 'hashed' });
 
     await expect(
       service.signup({ email: 'taken@example.com', password: 'password123' }, ctx),
@@ -137,6 +137,41 @@ describe('AuthService', () => {
 
     await expect(
       service.loginWithPassword({ email: 'user@example.com', password: 'anything' }, ctx),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    ).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+      message: expect.stringContaining('No password is set'),
+    });
+  });
+
+  it('lets a passwordless existing user set a password via signup', async () => {
+    userRepo.findByEmail.mockResolvedValue({
+      id: 'user-1',
+      email: 'admin@example.com',
+      name: 'Admin',
+      passwordHash: null,
+    });
+    userRepo.update.mockResolvedValue({});
+    userRepo.findById.mockResolvedValue({
+      id: 'user-1',
+      email: 'admin@example.com',
+      name: 'Admin',
+      avatarUrl: null,
+      status: 'ACTIVE',
+      role: {
+        name: ROLES.SUPER_ADMIN,
+        permissions: [{ permission: { key: 'user:manage' } }],
+      },
+    });
+
+    const result = await service.signup(
+      { email: 'admin@example.com', password: 'password123', name: 'Admin' },
+      ctx,
+    );
+
+    expect(userRepo.update).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ passwordHash: expect.any(String) }),
+    );
+    expect(result.user.email).toBe('admin@example.com');
   });
 });
