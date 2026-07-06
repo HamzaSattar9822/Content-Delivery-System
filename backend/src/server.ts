@@ -1,4 +1,5 @@
 import { createApp } from './app';
+import { ensureCoreSeed } from './bootstrap/ensureCoreSeed';
 import { env } from './config/env';
 import { logger } from './utils/logger';
 import { prisma } from './db/prisma';
@@ -7,6 +8,8 @@ import { startScheduler } from './scheduler';
 async function main(): Promise<void> {
   await prisma.$connect();
   logger.info('Database connected');
+
+  await ensureCoreSeed(prisma);
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {

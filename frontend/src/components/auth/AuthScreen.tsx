@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, API_URL } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { Banner, Button, Card, Field, Input } from '@/components/ui';
 
@@ -44,16 +44,31 @@ function GoogleIcon() {
   );
 }
 
+const DEFAULT_AUTH_CONFIG: AuthConfig = {
+  googleOauthConfigured: false,
+  passwordAuthEnabled: true,
+  devLoginEnabled: false,
+};
+
 export function useAuthConfig() {
-  const [config, setConfig] = useState<AuthConfig | null>(null);
+  const [config, setConfig] = useState<AuthConfig>(DEFAULT_AUTH_CONFIG);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12_000);
+
     api
-      .get<AuthConfig>('/auth/config')
+      .get<AuthConfig>('/auth/config', undefined, controller.signal)
       .then(setConfig)
-      .catch(() =>
-        setConfig({ googleOauthConfigured: false, passwordAuthEnabled: true, devLoginEnabled: true }),
-      );
+      .catch(() => {
+        // Keep defaults so login/signup forms are always usable.
+      })
+      .finally(() => window.clearTimeout(timeout));
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
   }, []);
 
   return config;
@@ -86,6 +101,11 @@ interface AuthShellProps {
 }
 
 export function AuthShell({ title, subtitle, footer, children }: AuthShellProps) {
+  const apiWarning =
+    typeof window !== 'undefined' &&
+    !['localhost', '127.0.0.1'].includes(window.location.hostname) &&
+    (API_URL.includes('localhost') || API_URL.includes('127.0.0.1'));
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-white">
       <div className="w-full max-w-sm">
@@ -96,6 +116,13 @@ export function AuthShell({ title, subtitle, footer, children }: AuthShellProps)
 
         <Card className="p-5">
           <h2 className="text-base font-semibold text-ink mb-4">{title}</h2>
+          {apiWarning && (
+            <div className="mb-3">
+              <Banner tone="error">
+                Set NEXT_PUBLIC_API_URL on Vercel to your Render backend URL, then redeploy.
+              </Banner>
+            </div>
+          )}
           {children}
         </Card>
 
