@@ -1,0 +1,52 @@
+# Render blueprint for the CDS backend (Docker).
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy via Blueprint so generateValue secrets are created automatically.
+# After deploy, set FRONTEND_URL to your Vercel URL in the Render dashboard.
+services:
+  - type: web
+    name: cds-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      # Auto-set to this service's public hostname (https:// added at runtime).
+      - key: APP_URL
+        fromService:
+          type: web
+          name: cds-backend
+          property: host
+      # Set to your Vercel frontend URL during blueprint setup, e.g. https://your-app.vercel.app
+      - key: FRONTEND_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: LINK_SIGNING_SECRET
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_DOMAIN
+        value: ""
+      # Usually same as FRONTEND_URL; used if FRONTEND_URL is omitted.
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64
+        sync: false
+      - key: GOOGLE_DRIVE_ROOT_FOLDER_ID
+        sync: false
+      - key: BOOTSTRAP_SUPER_ADMIN_EMAIL
+        sync: false

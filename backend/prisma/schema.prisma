@@ -1,0 +1,492 @@
+// ===========================================================================
+// Content Delivery System - Prisma schema
+// Generic content models (CMS-ready), RBAC, secure links, analytics, audit.
+// ===========================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --------------------------- Enums ----------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ContentStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum FileType {
+  VIDEO
+  PDF
+  DOCX
+  PPTX
+  IMAGE
+  AUDIO
+  ZIP
+  OTHER
+}
+
+enum LinkStatus {
+  ACTIVE
+  DISABLED
+  REVOKED
+  EXPIRED
+}
+
+enum DeviceType {
+  DESKTOP
+  MOBILE
+  TABLET
+  TV
+  BOT
+  UNKNOWN
+}
+
+enum NotificationType {
+  VIEW_THRESHOLD
+  LINK_EXPIRED
+  VIEW_LIMIT_EXCEEDED
+  SECURITY_EVENT
+  LINK_CREATED
+  SYSTEM
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum NotificationChannel {
+  EMAIL
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  USER_CREATE
+  USER_UPDATE
+  USER_DELETE
+  CONTENT_CREATE
+  CONTENT_UPDATE
+  CONTENT_DELETE
+  CONTENT_ARCHIVE
+  CONTENT_RESTORE
+  LINK_CREATE
+  LINK_UPDATE
+  LINK_REVOKE
+  LINK_DELETE
+  LINK_ACCESS
+  ACCESS_DENIED
+  SECURITY_EVENT
+  SETTINGS_UPDATE
+  DRIVE_SYNC
+}
+
+// --------------------------- RBAC -----------------------------------------
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique // SUPER_ADMIN | CONTENT_MANAGER | READ_ONLY
+  description String?
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  key         String           @unique // e.g. content:create
+  description String?
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  name         String?
+  avatarUrl    String?
+  googleId     String?    @unique
+  passwordHash String?    // legacy (JWT auth) — Better Auth stores credentials in Account
+  emailVerified Boolean   @default(false) // required by Better Auth
+  status       UserStatus @default(ACTIVE)
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  content       Content[]       @relation("ContentCreatedBy")
+  links         AccessLink[]    @relation("LinkCreatedBy")
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]  // legacy (JWT auth)
+  settings      Setting[]
+  accounts      Account[]       // Better Auth
+  authSessions  AuthSession[]   // Better Auth
+
+  @@index([roleId])
+  @@index([status])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  userAgent String?
+  ipAddress String?
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// --------------------------- Better Auth ----------------------------------
+// Core schema required by Better Auth (better-auth.com/docs/concepts/database).
+// `user` maps to the existing `users` table; the auth session table is named
+// `auth_sessions` to avoid colliding with the content-viewing `Session` model.
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model AuthSession {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("auth_sessions")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt @default(now())
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// --------------------------- Content --------------------------------------
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  content     Content[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id        String       @id @default(uuid())
+  name      String       @unique
+  slug      String       @unique
+  createdAt DateTime     @default(now())
+  content   ContentTag[]
+
+  @@map("tags")
+}
+
+model Content {
+  id                String        @id @default(uuid())
+  title             String
+  description       String?
+  categoryId        String?
+  category          Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  fileType          FileType      @default(VIDEO)
+  mimeType          String?
+  googleDriveFileId String
+  fileSize          BigInt        @default(0)
+  durationSeconds   Int?
+  thumbnailUrl      String?
+  checksum          String?
+  status            ContentStatus @default(ACTIVE)
+  archivedAt        DateTime?
+  createdById       String?
+  createdBy         User?         @relation("ContentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  tags      ContentTag[]
+  links     AccessLink[]
+  viewLogs  ViewLog[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([fileType])
+  @@index([googleDriveFileId])
+  @@index([title])
+  @@map("content")
+}
+
+model ContentTag {
+  contentId String
+  tagId     String
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contentId, tagId])
+  @@index([tagId])
+  @@map("content_tags")
+}
+
+// --------------------------- Access links ---------------------------------
+
+model AccessLink {
+  id              String     @id @default(uuid())
+  // SHA-256 hash of the raw token. The raw token is only ever in the URL.
+  tokenHash       String     @unique
+  label           String?
+  contentId       String
+  content         Content    @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  createdById     String?
+  createdBy       User?      @relation("LinkCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  status          LinkStatus @default(ACTIVE)
+  neverExpire     Boolean    @default(false)
+  expiresAt       DateTime?
+
+  // Access controls. NULL == unlimited.
+  maxViews        Int?
+  maxSessions     Int?
+  maxDevices      Int?
+  maxConcurrent   Int?
+
+  viewCount       Int        @default(0)
+
+  // Optional protections
+  passwordHash    String?
+  ipAllowlist     String[]   @default([])
+  domainAllowlist String[]   @default([])
+
+  // Threshold notification bookkeeping (highest threshold already fired)
+  lastThresholdFired Int     @default(0)
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  revokedAt       DateTime?
+
+  viewLogs        ViewLog[]
+  sessions        Session[]
+  devices         Device[]
+  notifications   Notification[]
+  notificationRules NotificationRule[]
+
+  @@index([contentId])
+  @@index([status])
+  @@index([createdById])
+  @@index([expiresAt])
+  @@map("access_links")
+}
+
+// Viewer device fingerprints tied to a link (device limit enforcement)
+model Device {
+  id          String     @id @default(uuid())
+  linkId      String
+  link        AccessLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  fingerprint String
+  userAgent   String?
+  browser     String?
+  os          String?
+  deviceType  DeviceType @default(UNKNOWN)
+  ipAddress   String?
+  firstSeenAt DateTime   @default(now())
+  lastSeenAt  DateTime   @default(now())
+  sessions    Session[]
+  viewLogs    ViewLog[]
+
+  @@unique([linkId, fingerprint])
+  @@index([linkId])
+  @@map("devices")
+}
+
+// Viewer sessions tied to a link (session + concurrency enforcement)
+model Session {
+  id         String     @id @default(uuid())
+  linkId     String
+  link       AccessLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  deviceId   String?
+  device     Device?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  sessionKey String     @unique
+  ipAddress  String?
+  userAgent  String?
+  startedAt  DateTime   @default(now())
+  lastSeenAt DateTime   @default(now())
+  endedAt    DateTime?
+  active     Boolean    @default(true)
+  viewLogs   ViewLog[]
+
+  @@index([linkId])
+  @@index([deviceId])
+  @@index([active])
+  @@map("sessions")
+}
+
+model ViewLog {
+  id           String      @id @default(uuid())
+  linkId       String
+  link         AccessLink  @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  contentId    String
+  content      Content     @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  sessionId    String?
+  session      Session?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  deviceId     String?
+  device       Device?     @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  ipAddress    String?
+  userAgent    String?
+  browser      String?
+  os           String?
+  deviceType   DeviceType  @default(UNKNOWN)
+  country      String?
+  referer      String?
+  watchSeconds Int         @default(0)
+  completed    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+
+  @@index([linkId])
+  @@index([contentId])
+  @@index([sessionId])
+  @@index([deviceId])
+  @@index([createdAt])
+  @@map("view_logs")
+}
+
+// --------------------------- Notifications --------------------------------
+
+// Configurable thresholds / alert rules (custom thresholds per link or global)
+model NotificationRule {
+  id        String           @id @default(uuid())
+  type      NotificationType
+  // For VIEW_THRESHOLD: number of views that triggers the alert.
+  threshold Int?
+  linkId    String?
+  link      AccessLink?      @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  recipient String?
+  enabled   Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([linkId])
+  @@index([type])
+  @@map("notification_rules")
+}
+
+model Notification {
+  id        String              @id @default(uuid())
+  type      NotificationType
+  channel   NotificationChannel @default(EMAIL)
+  status    NotificationStatus  @default(PENDING)
+  title     String
+  message   String
+  recipient String
+  linkId    String?
+  link      AccessLink?         @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  contentId String?
+  threshold Int?
+  metadata  Json?
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([type])
+  @@index([status])
+  @@index([linkId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// --------------------------- Audit & settings -----------------------------
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  actorEmail String?
+  action     AuditAction
+  entityType String?
+  entityId   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Setting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  description String?
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("settings")
+}

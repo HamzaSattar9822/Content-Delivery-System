@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+**/node_modules/
+/node/
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+**/.env
+
+# Local Postgres data
+.pgdata/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Prisma
+prisma/*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+
+# Test coverage
+coverage/
+
+# Misc
+*.tsbuildinfo
+.cache/
+tmp/
+uploads/
