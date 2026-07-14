@@ -33,7 +33,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-4000}
-      APP_URL: ${APP_URL:-http://localhost:4000}
+      APP_URL: https://content-delivery-system-k580.onrender.com
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       DATABASE_URL: postgresql://${POSTGRES_USER:-cds}:${POSTGRES_PASSWORD:-cds_password}@db:5432/${POSTGRES_DB:-cds}?schema=public
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
