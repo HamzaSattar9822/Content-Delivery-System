@@ -50,3 +50,12 @@ services:
         sync: false
       - key: BOOTSTRAP_SUPER_ADMIN_EMAIL
         sync: false
+      - key: BOOTSTRAP_SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        fromService:
+          type: web
+          name: cds-backend
+          property: host

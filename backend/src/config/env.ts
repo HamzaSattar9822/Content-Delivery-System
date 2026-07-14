@@ -98,6 +98,8 @@ const envSchema = z.object({
 
   CORS_ORIGINS: z.string().optional().default(''),
   BOOTSTRAP_SUPER_ADMIN_EMAIL: z.string().optional().default(''),
+  /** Optional password used to upsert a Better Auth credential account for BOOTSTRAP_SUPER_ADMIN_EMAIL. */
+  BOOTSTRAP_SUPER_ADMIN_PASSWORD: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(buildProcessEnv());
@@ -162,6 +164,20 @@ if (raw.NODE_ENV === 'production') {
   }
 }
 
+function isLocalhostUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+/** True when the browser on FRONTEND_URL must send cookies to a different APP_URL. */
+const crossSiteCookies =
+  raw.COOKIE_SECURE ||
+  (!isLocalhostUrl(appUrl) && !isLocalhostUrl(frontendUrl) && appUrl !== frontendUrl);
+
 export const env = {
   ...raw,
   APP_URL: appUrl,
@@ -170,6 +186,7 @@ export const env = {
   GOOGLE_OAUTH_REDIRECT_URI: googleOauthRedirectUri,
   isProduction: raw.NODE_ENV === 'production',
   isTest: raw.NODE_ENV === 'test',
+  crossSiteCookies,
   corsOrigins,
   driveConfigured: Boolean(
     raw.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64 || raw.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN,

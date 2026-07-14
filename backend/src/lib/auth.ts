@@ -77,9 +77,11 @@ async function createAuth() {
     },
 
     advanced: {
-      // Frontend (Vercel) and backend (Render) are different registrable
-      // domains, so the session cookie must be cross-site in production.
-      ...(env.isProduction
+      // Frontend (Vercel) and backend (Render) are different sites. Cross-site
+      // cookies need SameSite=None; Secure. Key off COOKIE_SECURE / public HTTPS
+      // URLs — not NODE_ENV — because Render often runs with NODE_ENV unset or
+      // development even on a live HTTPS service.
+      ...(env.crossSiteCookies
         ? { defaultCookieAttributes: { sameSite: 'none' as const, secure: true } }
         : {}),
     },
