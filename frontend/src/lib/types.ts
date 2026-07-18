@@ -98,14 +98,19 @@ export interface CreatedLinkResponse {
 export interface DashboardMetrics {
   totalContent: number;
   totalVideos: number;
+  totalPdfs: number;
+  contentByType: { key: string; count: number }[];
+  viewsByFileType: { key: string; count: number }[];
   activeLinks: number;
   expiredLinks: number;
+  revokedLinks: number;
   totalViews: number;
   viewsToday: number;
   mostViewedContent: { id: string; title: string; fileType: FileType; views: number }[];
   recentActivity: {
     id: string;
     content: string;
+    fileType?: FileType;
     link: string | null;
     deviceType: string;
     browser: string | null;
@@ -123,6 +128,7 @@ export interface DetailedAnalytics {
   averageWatchSeconds: number;
   totalWatchSeconds: number;
   completionRate: number;
+  fileTypes: { key: string; count: number }[];
   deviceTypes: { key: string; count: number }[];
   browsers: { key: string; count: number }[];
   countries: { key: string; count: number }[];

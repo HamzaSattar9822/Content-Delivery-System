@@ -44,11 +44,41 @@ interface AccessResponse {
   resumeAtSeconds: number | null;
 }
 
-const STATUS_MESSAGES: Record<string, string> = {
-  EXPIRED: 'This link has expired and is no longer available.',
-  REVOKED: 'This link has been revoked.',
-  DISABLED: 'This link is currently disabled.',
-};
+function statusCopy(status: string, fileType?: string): { title: string; message: string } {
+  const kind =
+    fileType === 'VIDEO'
+      ? 'video'
+      : fileType === 'PDF'
+        ? 'PDF'
+        : fileType === 'AUDIO'
+          ? 'audio'
+          : fileType === 'IMAGE'
+            ? 'image'
+            : 'content';
+
+  if (status === 'REVOKED') {
+    return {
+      title: `${kind === 'PDF' ? 'PDF' : kind.charAt(0).toUpperCase() + kind.slice(1)} revoked`,
+      message: `This ${kind} has been revoked and is no longer available.`,
+    };
+  }
+  if (status === 'EXPIRED') {
+    return {
+      title: 'Link expired',
+      message: 'This link has expired and is no longer available.',
+    };
+  }
+  if (status === 'DISABLED') {
+    return {
+      title: 'Link disabled',
+      message: `This ${kind} is currently disabled.`,
+    };
+  }
+  return {
+    title: 'Access unavailable',
+    message: 'This link is not available.',
+  };
+}
 
 export default function WatchPage() {
   return (
@@ -74,6 +104,7 @@ function WatchPageContent() {
   const [access, setAccess] = useState<AccessResponse | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
 
@@ -81,13 +112,17 @@ function WatchPageContent() {
     api
       .get<ResolveResponse>(`/public/links/${token}`)
       .then(setResolved)
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'This link could not be loaded.'))
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'This link could not be loaded.');
+        setErrorCode(err instanceof ApiError ? err.code : null);
+      })
       .finally(() => setLoading(false));
   }, [token]);
 
   const requestAccess = useCallback(async () => {
     setRequesting(true);
     setError(null);
+    setErrorCode(null);
     try {
       const data = await api.post<AccessResponse>(`/public/links/${token}/access`, {
         password: password || undefined,
@@ -95,6 +130,7 @@ function WatchPageContent() {
       setAccess(data);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Access denied.');
+      setErrorCode(err instanceof ApiError ? err.code : null);
     } finally {
       setRequesting(false);
     }
@@ -114,6 +150,17 @@ function WatchPageContent() {
     );
   }
 
+  const deniedFromResolve = resolved && resolved.status !== 'ACTIVE';
+  const statusUi = deniedFromResolve
+    ? statusCopy(resolved.status, resolved.content.fileType)
+    : errorCode === 'LINK_REVOKED'
+      ? statusCopy('REVOKED', resolved?.content.fileType)
+      : errorCode === 'LINK_EXPIRED'
+        ? statusCopy('EXPIRED', resolved?.content.fileType)
+        : errorCode === 'LINK_DISABLED'
+          ? statusCopy('DISABLED', resolved?.content.fileType)
+          : null;
+
   return (
     <div
       className={`min-h-screen flex flex-col ${isEmbed ? 'bg-black' : 'bg-white'}`}
@@ -126,18 +173,19 @@ function WatchPageContent() {
       )}
 
       <main className={`flex-1 w-full ${isEmbed ? 'p-0' : 'max-w-4xl mx-auto p-4 md:p-8'}`}>
-        {resolved && resolved.status !== 'ACTIVE' && (
-          <Card className="p-8 text-center">
-            <h1 className="text-lg font-semibold text-ink mb-2">Access Unavailable</h1>
-            <p className="text-sm text-muted">{STATUS_MESSAGES[resolved.status] ?? 'This link is not available.'}</p>
-          </Card>
+        {(deniedFromResolve || (statusUi && !access && !resolved?.requiresPassword)) && (
+          <StatusCard
+            embed={isEmbed}
+            title={statusUi?.title ?? 'Access Unavailable'}
+            message={statusUi?.message ?? error ?? 'This link is not available.'}
+          />
         )}
 
         {resolved && resolved.status === 'ACTIVE' && resolved.requiresPassword && !access && (
-          <Card className={`p-6 max-w-md ${isEmbed ? 'mx-auto mt-4' : 'mx-auto'}`}>
+          <Card className={`p-6 max-w-md ${isEmbed ? 'mx-auto mt-4 bg-white' : 'mx-auto'}`}>
             <h1 className="text-base font-semibold text-ink mb-1">{resolved.content.title}</h1>
             <p className="text-sm text-muted mb-4">This content is password protected.</p>
-            {error && <Banner tone="error">{error}</Banner>}
+            {error && !statusUi && <Banner tone="error">{error}</Banner>}
             <Field label="Password">
               <Input
                 type="password"
@@ -154,11 +202,17 @@ function WatchPageContent() {
           </Card>
         )}
 
-        {resolved && resolved.status === 'ACTIVE' && !resolved.requiresPassword && !access && error && (
-          <Card className="p-8 text-center">
-            <h1 className="text-lg font-semibold text-ink mb-2">Access Denied</h1>
-            <p className="text-sm text-muted">{error}</p>
-          </Card>
+        {resolved &&
+          resolved.status === 'ACTIVE' &&
+          !resolved.requiresPassword &&
+          !access &&
+          error &&
+          !statusUi && (
+            <StatusCard embed={isEmbed} title="Access Denied" message={error} />
+          )}
+
+        {!resolved && error && (
+          <StatusCard embed={isEmbed} title="Access Unavailable" message={error} />
         )}
 
         {access && (
@@ -166,7 +220,9 @@ function WatchPageContent() {
             {!isEmbed && (
               <>
                 <h1 className="text-lg font-semibold text-ink mb-1">{access.content.title}</h1>
-                {access.content.description && <p className="text-sm text-muted mb-4">{access.content.description}</p>}
+                {access.content.description && (
+                  <p className="text-sm text-muted mb-4">{access.content.description}</p>
+                )}
               </>
             )}
 
@@ -182,6 +238,15 @@ function WatchPageContent() {
         )}
       </main>
     </div>
+  );
+}
+
+function StatusCard({ embed, title, message }: { embed: boolean; title: string; message: string }) {
+  return (
+    <Card className={`p-8 text-center ${embed ? 'm-4 bg-white' : ''}`}>
+      <h1 className="text-lg font-semibold text-ink mb-2">{title}</h1>
+      <p className="text-sm text-muted">{message}</p>
+    </Card>
   );
 }
 
@@ -239,12 +304,20 @@ function ContentViewer({
   }
 
   if (fileType === 'PDF' || mimeType === 'application/pdf') {
+    const pdfSrc = src.includes('#') ? src : `${src}#toolbar=1&navpanes=0`;
     return (
-      <iframe
-        src={src}
+      <object
+        data={pdfSrc}
+        type="application/pdf"
         title={access.content.title}
-        className={embed ? 'w-full h-screen border-0' : 'w-full border border-line rounded h-[80vh]'}
-      />
+        className={embed ? 'w-full h-screen border-0 bg-white' : 'w-full border border-line rounded h-[80vh] bg-white'}
+      >
+        <iframe
+          src={pdfSrc}
+          title={access.content.title}
+          className={embed ? 'w-full h-screen border-0' : 'w-full border-0 h-[80vh]'}
+        />
+      </object>
     );
   }
 

@@ -2,14 +2,28 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import { AccessLink, Paginated } from '@/lib/types';
+import { AccessLink, NotificationRule, Paginated } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
-import { Badge, Banner, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, Table } from '@/components/ui';
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Modal,
+  PageHeader,
+  Select,
+  Spinner,
+  Table,
+} from '@/components/ui';
 import { formatDate } from '@/lib/format';
 
 export default function LinkManagementPage() {
   const { hasPermission } = useAuth();
   const canManage = hasPermission('link:manage');
+  const canNotify = hasPermission('notification:manage');
 
   const [links, setLinks] = useState<AccessLink[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +61,10 @@ export default function LinkManagementPage() {
 
   return (
     <div>
-      <PageHeader title="Link Management" description="Control, monitor and revoke delivery links." />
+      <PageHeader
+        title="Link Management"
+        description="Control delivery links, expiration, and view-threshold alerts per link."
+      />
       {error && <Banner tone="error">{error}</Banner>}
 
       <Card className="p-3 mb-4">
@@ -68,14 +85,15 @@ export default function LinkManagementPage() {
       ) : links.length === 0 ? (
         <EmptyState message="No delivery links yet." />
       ) : (
-        <Table headers={['Label', 'Content', 'Created', 'Expires', 'Views', 'Remaining', 'Status', '']}>
+        <Table headers={['Label', 'Content', 'Type', 'Created', 'Expires', 'Views', 'Remaining', 'Status', '']}>
           {links.map((l) => (
             <tr key={l.id} className="border-b border-line last:border-0 align-top">
-              <td className="px-4 py-2 text-ink max-w-[160px] truncate">
+              <td className="px-4 py-2 text-ink max-w-[140px] truncate">
                 {l.label ?? l.id.slice(0, 8)}
                 {l.hasPassword && <span className="ml-2 text-xs text-muted">(password)</span>}
               </td>
-              <td className="px-4 py-2 text-muted max-w-[160px] truncate">{l.content?.title ?? '-'}</td>
+              <td className="px-4 py-2 text-muted max-w-[140px] truncate">{l.content?.title ?? '-'}</td>
+              <td className="px-4 py-2 text-muted">{l.content?.fileType ?? '-'}</td>
               <td className="px-4 py-2 text-muted whitespace-nowrap">{formatDate(l.createdAt)}</td>
               <td className="px-4 py-2 text-muted whitespace-nowrap">
                 {l.neverExpire ? 'Never' : formatDate(l.expiresAt)}
@@ -121,6 +139,7 @@ export default function LinkManagementPage() {
       {editing && (
         <EditLinkModal
           link={editing}
+          canNotify={canNotify}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -132,11 +151,42 @@ export default function LinkManagementPage() {
   );
 }
 
-function EditLinkModal({ link, onClose, onSaved }: { link: AccessLink; onClose: () => void; onSaved: () => void }) {
+function EditLinkModal({
+  link,
+  canNotify,
+  onClose,
+  onSaved,
+}: {
+  link: AccessLink;
+  canNotify: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [expiresAt, setExpiresAt] = useState('');
   const [maxViews, setMaxViews] = useState(link.maxViews?.toString() ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [rules, setRules] = useState<NotificationRule[]>([]);
+  const [threshold, setThreshold] = useState('');
+  const [recipient, setRecipient] = useState('');
+  const [rulesLoading, setRulesLoading] = useState(false);
+
+  const loadRules = useCallback(async () => {
+    if (!canNotify) return;
+    setRulesLoading(true);
+    try {
+      const all = await api.get<NotificationRule[]>('/notifications/rules', { linkId: link.id });
+      setRules(all.filter((r) => r.link?.id === link.id));
+    } catch {
+      setRules([]);
+    } finally {
+      setRulesLoading(false);
+    }
+  }, [canNotify, link.id]);
+
+  useEffect(() => {
+    void loadRules();
+  }, [loadRules]);
 
   const extend = async () => {
     if (!expiresAt) return;
@@ -167,6 +217,38 @@ function EditLinkModal({ link, onClose, onSaved }: { link: AccessLink; onClose: 
     }
   };
 
+  const addRule = async () => {
+    const value = Number(threshold);
+    if (!value) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.post('/notifications/rules', {
+        type: 'VIEW_THRESHOLD',
+        threshold: value,
+        recipient: recipient || undefined,
+        linkId: link.id,
+      });
+      setThreshold('');
+      setRecipient('');
+      await loadRules();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to add alert rule');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleRule = async (rule: NotificationRule) => {
+    await api.patch(`/notifications/rules/${rule.id}`, { enabled: !rule.enabled });
+    await loadRules();
+  };
+
+  const deleteRule = async (id: string) => {
+    await api.delete(`/notifications/rules/${id}`);
+    await loadRules();
+  };
+
   return (
     <Modal open onClose={onClose} title={`Edit link: ${link.label ?? link.id.slice(0, 8)}`}>
       {error && <Banner tone="error">{error}</Banner>}
@@ -181,9 +263,16 @@ function EditLinkModal({ link, onClose, onSaved }: { link: AccessLink; onClose: 
             </Button>
           </div>
         </div>
+
         <div className="border-t border-line pt-4">
           <Field label="Maximum views" hint="Leave blank for unlimited.">
-            <Input type="number" min={1} value={maxViews} onChange={(e) => setMaxViews(e.target.value)} placeholder="Unlimited" />
+            <Input
+              type="number"
+              min={1}
+              value={maxViews}
+              onChange={(e) => setMaxViews(e.target.value)}
+              placeholder="Unlimited"
+            />
           </Field>
           <div className="mt-2">
             <Button onClick={increase} disabled={saving}>
@@ -191,6 +280,62 @@ function EditLinkModal({ link, onClose, onSaved }: { link: AccessLink; onClose: 
             </Button>
           </div>
         </div>
+
+        {canNotify && (
+          <div className="border-t border-line pt-4 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-ink">View threshold alerts</h3>
+              <p className="text-xs text-muted mt-0.5">
+                Email when this link reaches a view count. Global rules still apply.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Threshold (views)">
+                <Input
+                  type="number"
+                  min={1}
+                  value={threshold}
+                  onChange={(e) => setThreshold(e.target.value)}
+                  placeholder="100"
+                />
+              </Field>
+              <Field label="Recipient (optional)">
+                <Input
+                  type="email"
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  placeholder="alerts@example.com"
+                />
+              </Field>
+              <Button onClick={addRule} disabled={saving || !threshold}>
+                Add alert
+              </Button>
+            </div>
+            {rulesLoading ? (
+              <Spinner />
+            ) : rules.length === 0 ? (
+              <p className="text-xs text-muted">No per-link alerts yet.</p>
+            ) : (
+              <ul className="divide-y divide-line border border-line rounded">
+                {rules.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                    <span className="text-ink">
+                      {r.threshold} views · {r.recipient ?? 'Default recipient'} · {r.enabled ? 'On' : 'Off'}
+                    </span>
+                    <span className="shrink-0">
+                      <button onClick={() => toggleRule(r)} className="text-ink hover:underline mr-3">
+                        {r.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      <button onClick={() => deleteRule(r.id)} className="text-ink hover:underline">
+                        Delete
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   );

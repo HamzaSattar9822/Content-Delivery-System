@@ -129,15 +129,20 @@ export class StreamingService {
     };
 
     // --- status / expiration ---
-    if (link.status === LinkStatus.REVOKED) return deny('This link has been revoked', 'LINK_REVOKED');
-    if (link.status === LinkStatus.DISABLED) return deny('This link is currently disabled', 'LINK_DISABLED');
+    const kind = contentKindLabel(link.content.fileType);
+    if (link.status === LinkStatus.REVOKED) {
+      return deny(`This ${kind} has been revoked and is no longer available.`, 'LINK_REVOKED');
+    }
+    if (link.status === LinkStatus.DISABLED) {
+      return deny(`This ${kind} is currently disabled.`, 'LINK_DISABLED');
+    }
 
     if (this.effectiveStatus(link) === LinkStatus.EXPIRED) {
       if (link.status === LinkStatus.ACTIVE) {
         await this.linkRepo.update(link.id, { status: LinkStatus.EXPIRED });
         await this.notifications.notifyLinkExpired(link);
       }
-      return deny('This link has expired', 'LINK_EXPIRED');
+      return deny('This link has expired and is no longer available.', 'LINK_EXPIRED');
     }
 
     // --- password ---
@@ -284,8 +289,18 @@ export class StreamingService {
 
     const link = await this.linkRepo.findById(grant.linkId);
     if (!link) throw new NotFoundError('Content not found');
-    if (this.effectiveStatus(link as unknown as AccessLink) !== LinkStatus.ACTIVE) {
-      throw new AccessDeniedError('This link is no longer active', 'LINK_INACTIVE');
+    const status = this.effectiveStatus(link as unknown as AccessLink);
+    if (status === LinkStatus.REVOKED) {
+      throw new AccessDeniedError(
+        `This ${contentKindLabel(link.content.fileType)} has been revoked and is no longer available.`,
+        'LINK_REVOKED',
+      );
+    }
+    if (status === LinkStatus.EXPIRED) {
+      throw new AccessDeniedError('This link has expired and is no longer available.', 'LINK_EXPIRED');
+    }
+    if (status !== LinkStatus.ACTIVE) {
+      throw new AccessDeniedError('This link is no longer active.', 'LINK_INACTIVE');
     }
 
     await this.sessionRepo.touch(grant.sessionKey);
@@ -298,8 +313,15 @@ export class StreamingService {
     if (driveResponse.headers['content-range']) res.setHeader('Content-Range', driveResponse.headers['content-range']!);
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'no-store');
-    // Allow LMS / iframe embedding while keeping the Drive source hidden.
+    // Allow LMS / iframe embedding (outer watch page + nested PDF iframe).
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Security-Policy', 'frame-ancestors *');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Prefer inline display for PDFs inside iframes instead of download prompts.
+    const contentType = String(driveResponse.headers['content-type'] ?? link.content.mimeType ?? '');
+    if (contentType.includes('pdf') || link.content.fileType === 'PDF') {
+      res.setHeader('Content-Disposition', 'inline');
+    }
 
     driveResponse.stream.on('error', () => {
       if (!res.headersSent) res.status(502).end();
@@ -353,5 +375,20 @@ export class StreamingService {
   async endSession(sessionKey: string): Promise<void> {
     const session = await this.sessionRepo.findByKey(sessionKey);
     if (session) await this.sessionRepo.end(sessionKey);
+  }
+}
+
+function contentKindLabel(fileType: string | null | undefined): string {
+  switch (fileType) {
+    case 'VIDEO':
+      return 'video';
+    case 'AUDIO':
+      return 'audio';
+    case 'PDF':
+      return 'PDF';
+    case 'IMAGE':
+      return 'image';
+    default:
+      return 'content';
   }
 }

@@ -21,8 +21,10 @@ export function createApp(authHandler: AuthRequestHandler): Application {
 
   app.use(
     helmet({
-      // Streaming endpoints are embedded in LMS/iframes, so disable COEP and
-      // allow cross-origin resource loading for media.
+      // Streaming endpoints (especially PDFs) are nested in LMS iframes and in
+      // the public /watch page iframe. SAMEORIGIN framing would show
+      // "refused to connect" on external embeds.
+      frameguard: false,
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: { policy: 'cross-origin' },
       contentSecurityPolicy: false,

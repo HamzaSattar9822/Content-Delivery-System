@@ -15,17 +15,32 @@ export class AnalyticsService {
     const [
       totalContent,
       totalVideos,
+      totalPdfs,
+      contentByTypeRows,
       activeLinks,
       expiredLinks,
+      revokedLinks,
       totalViews,
       viewsToday,
       mostViewed,
       recentActivity,
+      viewsByTypeRows,
     ] = await Promise.all([
       this.db.content.count({ where: { status: { not: ContentStatus.ARCHIVED } } }),
-      this.db.content.count({ where: { fileType: FileType.VIDEO } }),
+      this.db.content.count({
+        where: { fileType: FileType.VIDEO, status: { not: ContentStatus.ARCHIVED } },
+      }),
+      this.db.content.count({
+        where: { fileType: FileType.PDF, status: { not: ContentStatus.ARCHIVED } },
+      }),
+      this.db.content.groupBy({
+        by: ['fileType'],
+        where: { status: { not: ContentStatus.ARCHIVED } },
+        _count: true,
+      }),
       this.db.accessLink.count({ where: { status: LinkStatus.ACTIVE } }),
       this.db.accessLink.count({ where: { status: LinkStatus.EXPIRED } }),
+      this.db.accessLink.count({ where: { status: LinkStatus.REVOKED } }),
       this.db.viewLog.count(),
       this.db.viewLog.count({ where: { createdAt: { gte: startOfToday() } } }),
       this.db.content.findMany({
@@ -42,17 +57,40 @@ export class AnalyticsService {
         take: 10,
         orderBy: { createdAt: 'desc' },
         include: {
-          content: { select: { title: true } },
+          content: { select: { title: true, fileType: true } },
           link: { select: { label: true } },
         },
       }),
+      this.db.viewLog.groupBy({
+        by: ['contentId'],
+        _count: true,
+      }),
     ]);
+
+    // Aggregate views by content file type.
+    const contentIds = viewsByTypeRows.map((r) => r.contentId);
+    const contentTypes = contentIds.length
+      ? await this.db.content.findMany({
+          where: { id: { in: contentIds } },
+          select: { id: true, fileType: true },
+        })
+      : [];
+    const typeById = new Map(contentTypes.map((c) => [c.id, c.fileType]));
+    const viewsByFileTypeMap = new Map<string, number>();
+    for (const row of viewsByTypeRows) {
+      const type = typeById.get(row.contentId) ?? 'OTHER';
+      viewsByFileTypeMap.set(type, (viewsByFileTypeMap.get(type) ?? 0) + row._count);
+    }
 
     return {
       totalContent,
       totalVideos,
+      totalPdfs,
+      contentByType: contentByTypeRows.map((r) => ({ key: r.fileType, count: r._count })),
+      viewsByFileType: Array.from(viewsByFileTypeMap.entries()).map(([key, count]) => ({ key, count })),
       activeLinks,
       expiredLinks,
+      revokedLinks,
       totalViews,
       viewsToday,
       mostViewedContent: mostViewed.map((c) => ({
@@ -64,6 +102,7 @@ export class AnalyticsService {
       recentActivity: recentActivity.map((v) => ({
         id: v.id,
         content: v.content.title,
+        fileType: v.content.fileType,
         link: v.link.label,
         deviceType: v.deviceType,
         browser: v.browser,
@@ -84,7 +123,7 @@ export class AnalyticsService {
         : {}),
     };
 
-    const [totalViews, viewers, sessions, durationAgg, completed, deviceTypes, browsers, countries] =
+    const [totalViews, viewers, sessions, durationAgg, completed, deviceTypes, browsers, countries, viewsWithContent] =
       await Promise.all([
         this.db.viewLog.count({ where }),
         this.db.viewLog.findMany({ where, select: { ipAddress: true } }),
@@ -94,6 +133,10 @@ export class AnalyticsService {
         this.db.viewLog.groupBy({ by: ['deviceType'], where, _count: true }),
         this.db.viewLog.groupBy({ by: ['browser'], where, _count: true }),
         this.db.viewLog.groupBy({ by: ['country'], where, _count: true }),
+        this.db.viewLog.findMany({
+          where,
+          select: { content: { select: { fileType: true } } },
+        }),
       ]);
 
     const ipCounts = new Map<string, number>();
@@ -104,6 +147,12 @@ export class AnalyticsService {
     const uniqueViewers = ipCounts.size;
     const repeatViewers = Array.from(ipCounts.values()).filter((c) => c > 1).length;
 
+    const fileTypeCounts = new Map<string, number>();
+    for (const v of viewsWithContent) {
+      const key = v.content.fileType;
+      fileTypeCounts.set(key, (fileTypeCounts.get(key) ?? 0) + 1);
+    }
+
     return {
       totalViews,
       uniqueViewers,
@@ -112,6 +161,7 @@ export class AnalyticsService {
       averageWatchSeconds: Math.round(durationAgg._avg.watchSeconds ?? 0),
       totalWatchSeconds: durationAgg._sum.watchSeconds ?? 0,
       completionRate: totalViews ? Math.round((completed / totalViews) * 100) : 0,
+      fileTypes: Array.from(fileTypeCounts.entries()).map(([key, count]) => ({ key, count })),
       deviceTypes: deviceTypes.map((d) => ({ key: d.deviceType, count: d._count })),
       browsers: browsers.map((b) => ({ key: b.browser ?? 'Unknown', count: b._count })),
       countries: countries.map((c) => ({ key: c.country ?? 'Unknown', count: c._count })),
