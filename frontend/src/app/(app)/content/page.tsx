@@ -1,10 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { ensureContentFromDrive } from '@/lib/content-from-drive';
 import { Category, Content, DriveFile, Paginated } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
+import { DriveBrowser } from '@/components/DriveBrowser';
 import {
   Badge,
   Banner,
@@ -22,10 +25,16 @@ import {
 } from '@/components/ui';
 import { formatBytes, formatDate } from '@/lib/format';
 
+type LibraryTab = 'library' | 'drive';
+
 export default function ContentLibraryPage() {
+  const router = useRouter();
   const { hasPermission } = useAuth();
   const canManage = hasPermission('content:manage');
+  const canLink = hasPermission('link:manage');
+  const canBrowseDrive = hasPermission('drive:browse');
 
+  const [tab, setTab] = useState<LibraryTab>('library');
   const [items, setItems] = useState<Content[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +44,8 @@ export default function ContentLibraryPage() {
   const [fileType, setFileType] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [showCreate, setShowCreate] = useState(false);
+  const [busyDriveId, setBusyDriveId] = useState<string | null>(null);
+  const [driveActionError, setDriveActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,7 +55,7 @@ export default function ContentLibraryPage() {
         status,
         fileType,
         sortBy,
-        pageSize: 50,
+        pageSize: 100,
       });
       setItems(data.data);
     } catch (err) {
@@ -62,6 +73,14 @@ export default function ContentLibraryPage() {
     api.get<Category[]>('/content/categories').then(setCategories).catch(() => undefined);
   }, []);
 
+  const registeredByDriveId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of items) {
+      if (item.googleDriveFileId) map.set(item.googleDriveFileId, item.id);
+    }
+    return map;
+  }, [items]);
+
   const archive = async (id: string, currentStatus: string) => {
     const action = currentStatus === 'ARCHIVED' ? 'restore' : 'archive';
     await api.post(`/content/${id}/${action}`);
@@ -74,79 +93,178 @@ export default function ContentLibraryPage() {
     void load();
   };
 
+  const addFromDrive = async (file: DriveFile) => {
+    setDriveActionError(null);
+    setBusyDriveId(file.id);
+    try {
+      await ensureContentFromDrive(file);
+      await load();
+    } catch (err) {
+      setDriveActionError(err instanceof ApiError ? err.message : 'Failed to add content from Drive');
+    } finally {
+      setBusyDriveId(null);
+    }
+  };
+
+  const linkFromDrive = async (file: DriveFile) => {
+    setDriveActionError(null);
+    setBusyDriveId(file.id);
+    try {
+      const content = await ensureContentFromDrive(file);
+      router.push(`/links/create?contentId=${content.id}`);
+    } catch (err) {
+      setDriveActionError(err instanceof ApiError ? err.message : 'Failed to prepare link from Drive');
+      setBusyDriveId(null);
+    }
+  };
+
   return (
     <div>
       <PageHeader
         title="Content Library"
-        description="Manage content sourced from Google Drive."
+        description="Browse Google Drive and manage content registered for delivery."
         action={canManage && <Button onClick={() => setShowCreate(true)}>Add Content</Button>}
       />
 
       {error && <Banner tone="error">{error}</Banner>}
+      {driveActionError && <Banner tone="error">{driveActionError}</Banner>}
 
-      <Card className="p-3 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Input placeholder="Search title or description" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="DRAFT">Draft</option>
-            <option value="ARCHIVED">Archived</option>
-          </Select>
-          <Select value={fileType} onChange={(e) => setFileType(e.target.value)}>
-            <option value="">All types</option>
-            {['VIDEO', 'PDF', 'DOCX', 'PPTX', 'IMAGE', 'AUDIO', 'ZIP', 'OTHER'].map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-            <option value="createdAt">Newest</option>
-            <option value="title">Title</option>
-            <option value="fileSize">Size</option>
-          </Select>
-        </div>
-      </Card>
+      <div className="flex gap-2 mb-4 border-b border-line">
+        <TabButton active={tab === 'library'} onClick={() => setTab('library')}>
+          Registered library
+        </TabButton>
+        {canBrowseDrive && (
+          <TabButton active={tab === 'drive'} onClick={() => setTab('drive')}>
+            Google Drive
+          </TabButton>
+        )}
+      </div>
 
-      {loading ? (
-        <Spinner />
-      ) : items.length === 0 ? (
-        <EmptyState message="No content found. Add content from Google Drive to get started." />
-      ) : (
-        <Table headers={['Title', 'Type', 'Category', 'Size', 'Links', 'Views', 'Status', 'Created', '']}>
-          {items.map((c) => (
-            <tr key={c.id} className="border-b border-line last:border-0">
-              <td className="px-4 py-2 text-ink max-w-[200px] truncate">{c.title}</td>
-              <td className="px-4 py-2 text-muted">{c.fileType}</td>
-              <td className="px-4 py-2 text-muted">{c.category?.name ?? '-'}</td>
-              <td className="px-4 py-2 text-muted">{formatBytes(c.fileSize)}</td>
-              <td className="px-4 py-2 text-muted">{c._count?.links ?? 0}</td>
-              <td className="px-4 py-2 text-muted">{c._count?.viewLogs ?? 0}</td>
-              <td className="px-4 py-2">
-                <Badge tone={c.status === 'ACTIVE' ? 'default' : 'muted'}>{c.status}</Badge>
-              </td>
-              <td className="px-4 py-2 text-muted whitespace-nowrap">{formatDate(c.createdAt)}</td>
-              <td className="px-4 py-2 whitespace-nowrap text-right">
-                {hasPermission('link:manage') && (
-                  <Link href={`/links/create?contentId=${c.id}`} className="text-sm text-ink hover:underline mr-3">
-                    Link
+      {tab === 'drive' && canBrowseDrive ? (
+        <Card className="p-4">
+          <p className="text-sm text-muted mb-3">
+            Preview everything in Drive. Add a file to the library, or create a delivery link directly — the file is
+            registered automatically if needed.
+          </p>
+          <DriveBrowser
+            registeredByDriveId={registeredByDriveId}
+            onSelect={(file) => {
+              if (canManage) void addFromDrive(file);
+            }}
+            maxHeightClassName="max-h-[28rem]"
+            renderFileActions={(file, registeredContentId) => (
+              <div className="flex items-center gap-2 shrink-0">
+                {canManage && !registeredContentId && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!py-1 !px-2 text-xs"
+                    disabled={busyDriveId === file.id}
+                    onClick={() => void addFromDrive(file)}
+                  >
+                    {busyDriveId === file.id ? 'Adding…' : 'Add'}
+                  </Button>
+                )}
+                {canLink && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!py-1 !px-2 text-xs"
+                    disabled={busyDriveId === file.id}
+                    onClick={() => void linkFromDrive(file)}
+                  >
+                    {busyDriveId === file.id ? '…' : 'Link'}
+                  </Button>
+                )}
+                {registeredContentId && canLink && (
+                  <Link
+                    href={`/links/create?contentId=${registeredContentId}`}
+                    className="text-xs text-ink hover:underline"
+                  >
+                    Open
                   </Link>
                 )}
-                {canManage && (
-                  <>
-                    <button onClick={() => archive(c.id, c.status)} className="text-sm text-ink hover:underline mr-3">
-                      {c.status === 'ARCHIVED' ? 'Restore' : 'Archive'}
-                    </button>
-                    <button onClick={() => remove(c.id)} className="text-sm text-ink hover:underline">
-                      Delete
-                    </button>
-                  </>
-                )}
-              </td>
-            </tr>
-          ))}
-        </Table>
+              </div>
+            )}
+          />
+        </Card>
+      ) : (
+        <>
+          <Card className="p-3 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <Input
+                placeholder="Search title or description"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="">All statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="DRAFT">Draft</option>
+                <option value="ARCHIVED">Archived</option>
+              </Select>
+              <Select value={fileType} onChange={(e) => setFileType(e.target.value)}>
+                <option value="">All types</option>
+                {['VIDEO', 'PDF', 'DOCX', 'PPTX', 'IMAGE', 'AUDIO', 'ZIP', 'OTHER'].map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+              <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                <option value="createdAt">Newest</option>
+                <option value="title">Title</option>
+                <option value="fileSize">Size</option>
+              </Select>
+            </div>
+          </Card>
+
+          {loading ? (
+            <Spinner />
+          ) : items.length === 0 ? (
+            <EmptyState message="No content registered yet. Browse Google Drive and add files, or use Add Content." />
+          ) : (
+            <Table headers={['Title', 'Type', 'Category', 'Size', 'Links', 'Views', 'Status', 'Created', '']}>
+              {items.map((c) => (
+                <tr key={c.id} className="border-b border-line last:border-0">
+                  <td className="px-4 py-2 text-ink max-w-[200px] truncate">{c.title}</td>
+                  <td className="px-4 py-2 text-muted">{c.fileType}</td>
+                  <td className="px-4 py-2 text-muted">{c.category?.name ?? '-'}</td>
+                  <td className="px-4 py-2 text-muted">{formatBytes(c.fileSize)}</td>
+                  <td className="px-4 py-2 text-muted">{c._count?.links ?? 0}</td>
+                  <td className="px-4 py-2 text-muted">{c._count?.viewLogs ?? 0}</td>
+                  <td className="px-4 py-2">
+                    <Badge tone={c.status === 'ACTIVE' ? 'default' : 'muted'}>{c.status}</Badge>
+                  </td>
+                  <td className="px-4 py-2 text-muted whitespace-nowrap">{formatDate(c.createdAt)}</td>
+                  <td className="px-4 py-2 whitespace-nowrap text-right">
+                    {canLink && (
+                      <Link
+                        href={`/links/create?contentId=${c.id}`}
+                        className="text-sm text-ink hover:underline mr-3"
+                      >
+                        Link
+                      </Link>
+                    )}
+                    {canManage && (
+                      <>
+                        <button
+                          onClick={() => archive(c.id, c.status)}
+                          className="text-sm text-ink hover:underline mr-3"
+                        >
+                          {c.status === 'ARCHIVED' ? 'Restore' : 'Archive'}
+                        </button>
+                        <button onClick={() => remove(c.id)} className="text-sm text-ink hover:underline">
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </>
       )}
 
       {showCreate && (
@@ -163,6 +281,28 @@ export default function ContentLibraryPage() {
   );
 }
 
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-2 text-sm border-b-2 -mb-px ${
+        active ? 'border-ink text-ink font-medium' : 'border-transparent text-muted hover:text-ink'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function CreateContentModal({
   categories,
   onClose,
@@ -172,60 +312,14 @@ function CreateContentModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [driveConfigured, setDriveConfigured] = useState<boolean | null>(null);
-  const [folderStack, setFolderStack] = useState<string[]>([]);
-  const [files, setFiles] = useState<DriveFile[]>([]);
-  const [driveLoading, setDriveLoading] = useState(false);
-  const [driveError, setDriveError] = useState<string | null>(null);
-
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [tags, setTags] = useState('');
   const [googleDriveFileId, setGoogleDriveFileId] = useState('');
+  const [selectedName, setSelectedName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const currentFolder = folderStack[folderStack.length - 1];
-
-  const browse = useCallback(async (folderId?: string) => {
-    setDriveLoading(true);
-    setDriveError(null);
-    try {
-      const data = await api.get<{ files: DriveFile[] }>('/drive/files', { folderId });
-      setFiles(data.files);
-    } catch (err) {
-      setDriveError(err instanceof ApiError ? err.message : 'Failed to browse Drive');
-    } finally {
-      setDriveLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    api
-      .get<{ configured: boolean }>('/drive/status')
-      .then((d) => {
-        setDriveConfigured(d.configured);
-        if (d.configured) void browse();
-      })
-      .catch(() => setDriveConfigured(false));
-  }, [browse]);
-
-  const openFolder = (id: string) => {
-    setFolderStack((s) => [...s, id]);
-    void browse(id);
-  };
-
-  const goBack = () => {
-    const next = folderStack.slice(0, -1);
-    setFolderStack(next);
-    void browse(next[next.length - 1]);
-  };
-
-  const selectFile = (file: DriveFile) => {
-    setGoogleDriveFileId(file.id);
-    if (!title) setTitle(file.name);
-  };
 
   const submit = async () => {
     setError(null);
@@ -240,8 +334,13 @@ function CreateContentModal({
         description: description || undefined,
         categoryId: categoryId || undefined,
         googleDriveFileId,
-        tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
-        syncFromDrive: driveConfigured ?? false,
+        tags: tags
+          ? tags
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : undefined,
+        syncFromDrive: true,
       });
       onCreated();
     } catch (err) {
@@ -256,48 +355,22 @@ function CreateContentModal({
       {error && <Banner tone="error">{error}</Banner>}
 
       <div className="space-y-4">
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-ink">Google Drive</span>
-            {folderStack.length > 0 && (
-              <button className="text-xs text-ink hover:underline" onClick={goBack}>
-                Back
-              </button>
-            )}
-          </div>
-          {driveConfigured === false ? (
-            <Banner>
-              Google Drive is not configured on the server. You can still add content by entering a Drive file ID
-              manually below.
-            </Banner>
-          ) : (
-            <div className="border border-line rounded max-h-48 overflow-y-auto">
-              {driveError && <div className="p-2 text-xs text-ink">{driveError}</div>}
-              {driveLoading ? (
-                <div className="p-3 text-xs text-muted">Loading Drive...</div>
-              ) : files.length === 0 ? (
-                <div className="p-3 text-xs text-muted">This folder is empty.</div>
-              ) : (
-                <ul className="divide-y divide-line">
-                  {files.map((f) => (
-                    <li key={f.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <button
-                        className="text-left text-ink hover:underline truncate"
-                        onClick={() => (f.isFolder ? openFolder(f.id) : selectFile(f))}
-                      >
-                        {f.isFolder ? `[Folder] ${f.name}` : f.name}
-                      </button>
-                      {!f.isFolder && googleDriveFileId === f.id && <span className="text-xs text-muted ml-2">Selected</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
+        <DriveBrowser
+          selectedId={googleDriveFileId}
+          onSelect={(file) => {
+            setGoogleDriveFileId(file.id);
+            setSelectedName(file.name);
+            if (!title) setTitle(file.name);
+          }}
+          maxHeightClassName="max-h-48"
+        />
 
-        <Field label="Google Drive File ID" hint="Auto-filled when you select a file above.">
-          <Input value={googleDriveFileId} onChange={(e) => setGoogleDriveFileId(e.target.value)} placeholder="Drive file id" />
+        <Field label="Google Drive File ID" hint={selectedName ? `Selected: ${selectedName}` : 'Auto-filled when you select a file above.'}>
+          <Input
+            value={googleDriveFileId}
+            onChange={(e) => setGoogleDriveFileId(e.target.value)}
+            placeholder="Drive file id"
+          />
         </Field>
         <Field label="Title">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Content title" />

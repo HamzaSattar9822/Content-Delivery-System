@@ -65,6 +65,11 @@ export class ContentService {
   }
 
   async create(input: CreateContentInput, ctx: AuditContext) {
+    // Reuse an existing library entry for the same Drive file so link-create /
+    // Drive-browse flows stay idempotent instead of duplicating rows.
+    const existing = await this.contentRepo.findByGoogleDriveFileId(input.googleDriveFileId);
+    if (existing) return existing;
+
     let { fileType, mimeType, fileSize, durationSeconds, thumbnailUrl, title } = input;
 
     // Optionally enrich metadata directly from Google Drive.

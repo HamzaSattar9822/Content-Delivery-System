@@ -26,6 +26,14 @@ export class ContentRepository {
     return this.db.content.findUnique({ where: { id }, include: contentInclude });
   }
 
+  findByGoogleDriveFileId(googleDriveFileId: string) {
+    return this.db.content.findFirst({
+      where: { googleDriveFileId, status: { not: ContentStatus.ARCHIVED } },
+      include: contentInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   create(data: Prisma.ContentCreateInput) {
     return this.db.content.create({ data, include: contentInclude });
   }
