@@ -41,6 +41,7 @@ enum LinkStatus {
   DISABLED
   REVOKED
   EXPIRED
+  DELETED
 }
 
 enum DeviceType {

@@ -109,13 +109,17 @@ export class ContentService {
       action: AuditAction.CONTENT_CREATE,
       entityType: 'content',
       entityId: content.id,
-      metadata: { title: content.title },
+      metadata: {
+        title: content.title,
+        fileType: content.fileType,
+        googleDriveFileId: content.googleDriveFileId,
+      },
     });
     return this.contentRepo.findById(content.id);
   }
 
   async update(id: string, input: UpdateContentInput, ctx: AuditContext) {
-    await this.getById(id);
+    const existing = await this.getById(id);
     const data: Prisma.ContentUpdateInput = {
       title: input.title,
       description: input.description,
@@ -137,6 +141,10 @@ export class ContentService {
       action: AuditAction.CONTENT_UPDATE,
       entityType: 'content',
       entityId: id,
+      metadata: {
+        title: content.title ?? existing.title,
+        changes: Object.keys(input),
+      },
     });
     return this.contentRepo.findById(content.id);
   }
@@ -147,7 +155,13 @@ export class ContentService {
       status: ContentStatus.ARCHIVED,
       archivedAt: new Date(),
     });
-    await this.audit.record({ ...ctx, action: AuditAction.CONTENT_ARCHIVE, entityType: 'content', entityId: id });
+    await this.audit.record({
+      ...ctx,
+      action: AuditAction.CONTENT_ARCHIVE,
+      entityType: 'content',
+      entityId: id,
+      metadata: { title: content.title },
+    });
     return content;
   }
 
@@ -157,13 +171,25 @@ export class ContentService {
       status: ContentStatus.ACTIVE,
       archivedAt: null,
     });
-    await this.audit.record({ ...ctx, action: AuditAction.CONTENT_RESTORE, entityType: 'content', entityId: id });
+    await this.audit.record({
+      ...ctx,
+      action: AuditAction.CONTENT_RESTORE,
+      entityType: 'content',
+      entityId: id,
+      metadata: { title: content.title },
+    });
     return content;
   }
 
   async remove(id: string, ctx: AuditContext) {
-    await this.getById(id);
+    const existing = await this.getById(id);
     await this.contentRepo.delete(id);
-    await this.audit.record({ ...ctx, action: AuditAction.CONTENT_DELETE, entityType: 'content', entityId: id });
+    await this.audit.record({
+      ...ctx,
+      action: AuditAction.CONTENT_DELETE,
+      entityType: 'content',
+      entityId: id,
+      metadata: { title: existing.title, fileType: existing.fileType },
+    });
   }
 }

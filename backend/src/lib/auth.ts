@@ -124,7 +124,14 @@ async function createAuth() {
             try {
               const u = await prisma.user.findUnique({ where: { id: userId } });
               await prisma.auditLog.create({
-                data: { userId, actorEmail: u?.email ?? null, action: AuditAction.LOGIN },
+                data: {
+                  userId,
+                  actorEmail: u?.email ?? null,
+                  action: AuditAction.LOGIN,
+                  entityType: 'user',
+                  entityId: userId,
+                  metadata: { email: u?.email ?? null, name: u?.name ?? null },
+                },
               });
             } catch (err) {
               logger.warn({ err }, 'Failed to write LOGIN audit log');

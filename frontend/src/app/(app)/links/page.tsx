@@ -29,7 +29,7 @@ export default function LinkManagementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('ACTIVE');
   const [editing, setEditing] = useState<AccessLink | null>(null);
 
   const load = useCallback(async () => {
@@ -54,7 +54,7 @@ export default function LinkManagementPage() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this link permanently?')) return;
+    if (!confirm('Move this link to Deleted? Viewers will no longer be able to open it.')) return;
     await api.delete(`/links/${id}`);
     void load();
   };
@@ -71,11 +71,12 @@ export default function LinkManagementPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Input placeholder="Search by label or content" value={search} onChange={(e) => setSearch(e.target.value)} />
           <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
             <option value="ACTIVE">Active</option>
             <option value="DISABLED">Disabled</option>
             <option value="REVOKED">Revoked</option>
             <option value="EXPIRED">Expired</option>
+            <option value="DELETED">Deleted</option>
+            <option value="all">All (except deleted)</option>
           </Select>
         </div>
       </Card>
@@ -110,22 +111,24 @@ export default function LinkManagementPage() {
                       <button onClick={() => act(l.id, 'disable')} className="text-sm text-ink hover:underline">
                         Disable
                       </button>
-                    ) : l.status === 'DISABLED' ? (
+                    ) : l.status === 'DISABLED' || l.status === 'DELETED' ? (
                       <button onClick={() => act(l.id, 'enable')} className="text-sm text-ink hover:underline">
-                        Enable
+                        {l.status === 'DELETED' ? 'Restore' : 'Enable'}
                       </button>
                     ) : null}
                     <button onClick={() => setEditing(l)} className="text-sm text-ink hover:underline">
                       Edit
                     </button>
-                    {l.status !== 'REVOKED' && (
+                    {l.status !== 'REVOKED' && l.status !== 'DELETED' && (
                       <button onClick={() => act(l.id, 'revoke')} className="text-sm text-ink hover:underline">
                         Revoke
                       </button>
                     )}
-                    <button onClick={() => remove(l.id)} className="text-sm text-ink hover:underline">
-                      Delete
-                    </button>
+                    {l.status !== 'DELETED' && (
+                      <button onClick={() => remove(l.id)} className="text-sm text-ink hover:underline">
+                        Delete
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <span className="text-xs text-muted">View only</span>

@@ -30,7 +30,7 @@ export interface AuthUser {
 
 export type FileType = 'VIDEO' | 'PDF' | 'DOCX' | 'PPTX' | 'IMAGE' | 'AUDIO' | 'ZIP' | 'OTHER';
 export type ContentStatus = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
-export type LinkStatus = 'ACTIVE' | 'DISABLED' | 'REVOKED' | 'EXPIRED';
+export type LinkStatus = 'ACTIVE' | 'DISABLED' | 'REVOKED' | 'EXPIRED' | 'DELETED';
 
 export interface Category {
   id: string;
@@ -170,9 +170,13 @@ export interface NotificationRule {
 export interface AuditLogRecord {
   id: string;
   action: string;
+  actionLabel?: string;
   actorEmail: string | null;
+  actorDisplay?: string;
   entityType: string | null;
   entityId: string | null;
+  entityDisplay?: string;
+  summary?: string;
   ipAddress: string | null;
   createdAt: string;
   metadata: Record<string, unknown> | null;

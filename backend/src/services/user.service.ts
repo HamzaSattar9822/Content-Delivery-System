@@ -64,15 +64,33 @@ export class UserService {
       data.role = { connect: { id: role.id } };
     }
     const user = await this.userRepo.update(id, data);
-    await this.audit.record({ ...ctx, action: AuditAction.USER_UPDATE, entityType: 'user', entityId: id });
+    await this.audit.record({
+      ...ctx,
+      action: AuditAction.USER_UPDATE,
+      entityType: 'user',
+      entityId: id,
+      metadata: {
+        email: user.email,
+        name: user.name,
+        role: input.roleName,
+        status: input.status,
+        changes: Object.keys(input),
+      },
+    });
     return user;
   }
 
   async remove(id: string, ctx: AuditContext) {
     if (ctx.userId === id) throw new ForbiddenError('You cannot delete your own account');
-    await this.getById(id);
+    const existing = await this.getById(id);
     await this.userRepo.delete(id);
-    await this.audit.record({ ...ctx, action: AuditAction.USER_DELETE, entityType: 'user', entityId: id });
+    await this.audit.record({
+      ...ctx,
+      action: AuditAction.USER_DELETE,
+      entityType: 'user',
+      entityId: id,
+      metadata: { email: existing.email, name: existing.name },
+    });
   }
 
   listRoles() {

@@ -4,6 +4,8 @@ import { prisma } from '../db/prisma';
 export interface LinkListFilter {
   search?: string;
   status?: LinkStatus;
+  /** When true and status is unset, hide soft-deleted links. */
+  excludeDeleted?: boolean;
   contentId?: string;
   skip: number;
   take: number;
@@ -53,7 +55,11 @@ export class AccessLinkRepository {
 
   async list(filter: LinkListFilter): Promise<[AccessLink[], number]> {
     const where: Prisma.AccessLinkWhereInput = {};
-    if (filter.status) where.status = filter.status;
+    if (filter.status) {
+      where.status = filter.status;
+    } else if (filter.excludeDeleted) {
+      where.status = { not: LinkStatus.DELETED };
+    }
     if (filter.contentId) where.contentId = filter.contentId;
     if (filter.search) {
       where.OR = [

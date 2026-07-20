@@ -57,11 +57,19 @@ export class LinkService {
     const allowed = ['createdAt', 'expiresAt', 'viewCount'];
     const orderBy = { [allowed.includes(sortField) ? sortField : 'createdAt']: sortDir } as LinkListFilter['orderBy'];
 
+    const statusRaw = query.status !== undefined && query.status !== null ? String(query.status).trim() : 'all';
+    const status =
+      statusRaw && statusRaw !== 'all'
+        ? (statusRaw as LinkStatus)
+        : undefined;
+    const excludeDeleted = !status;
+
     const [data, total] = await this.linkRepo.list({
       skip,
       take,
       search: query.search ? String(query.search) : undefined,
-      status: query.status as LinkStatus | undefined,
+      status,
+      excludeDeleted,
       contentId: query.contentId ? String(query.contentId) : undefined,
       orderBy,
     });
@@ -103,9 +111,17 @@ export class LinkService {
     await this.audit.record({
       ...ctx,
       action: AuditAction.LINK_CREATE,
-      entityType: 'access_link',
+      entityType: 'delivery_link',
       entityId: link.id,
-      metadata: { contentId: input.contentId, label: input.label },
+      metadata: {
+        label: link.label ?? 'Untitled link',
+        contentId: content.id,
+        contentTitle: content.title,
+        fileType: content.fileType,
+        neverExpire: link.neverExpire,
+        expiresAt: link.expiresAt,
+        maxViews: link.maxViews,
+      },
     });
 
     // The raw token is returned exactly once; only its hash is persisted.
@@ -119,7 +135,7 @@ export class LinkService {
   }
 
   async update(id: string, input: Partial<CreateLinkInput>, ctx: AuditContext) {
-    await this.getById(id);
+    const existing = await this.getById(id);
     const data: Prisma.AccessLinkUpdateInput = {
       label: input.label,
       maxViews: input.maxViews,
@@ -139,12 +155,22 @@ export class LinkService {
       data.passwordHash = input.password ? await bcrypt.hash(input.password, 10) : null;
     }
     const link = await this.linkRepo.update(id, data);
-    await this.audit.record({ ...ctx, action: AuditAction.LINK_UPDATE, entityType: 'access_link', entityId: id });
+    await this.audit.record({
+      ...ctx,
+      action: AuditAction.LINK_UPDATE,
+      entityType: 'delivery_link',
+      entityId: id,
+      metadata: {
+        label: link.label ?? existing.label ?? 'Untitled link',
+        contentTitle: link.content?.title ?? existing.content?.title,
+        changes: Object.keys(input),
+      },
+    });
     return this.decorateOne(link);
   }
 
   async extendExpiration(id: string, expiresAt: string, ctx: AuditContext) {
-    await this.getById(id);
+    const existing = await this.getById(id);
     const link = await this.linkRepo.update(id, {
       expiresAt: new Date(expiresAt),
       neverExpire: false,
@@ -153,41 +179,82 @@ export class LinkService {
     await this.audit.record({
       ...ctx,
       action: AuditAction.LINK_UPDATE,
-      entityType: 'access_link',
+      entityType: 'delivery_link',
       entityId: id,
-      metadata: { extendedTo: expiresAt },
+      metadata: {
+        label: link.label ?? existing.label ?? 'Untitled link',
+        contentTitle: link.content?.title ?? existing.content?.title,
+        change: 'extended_expiration',
+        extendedTo: expiresAt,
+      },
     });
     return this.decorateOne(link);
   }
 
   async increaseViewLimit(id: string, maxViews: number | null, ctx: AuditContext) {
-    await this.getById(id);
+    const existing = await this.getById(id);
     const link = await this.linkRepo.update(id, { maxViews });
     await this.audit.record({
       ...ctx,
       action: AuditAction.LINK_UPDATE,
-      entityType: 'access_link',
+      entityType: 'delivery_link',
       entityId: id,
-      metadata: { maxViews },
+      metadata: {
+        label: link.label ?? existing.label ?? 'Untitled link',
+        contentTitle: link.content?.title ?? existing.content?.title,
+        change: 'view_limit',
+        maxViews,
+      },
     });
     return this.decorateOne(link);
   }
 
   async setStatus(id: string, status: LinkStatus, ctx: AuditContext) {
-    await this.getById(id);
+    const existing = await this.getById(id);
+    if (existing.status === LinkStatus.DELETED && status !== LinkStatus.ACTIVE) {
+      throw new BadRequestError('Deleted links can only be restored to Active');
+    }
     const link = await this.linkRepo.update(id, {
       status,
       revokedAt: status === LinkStatus.REVOKED ? new Date() : null,
     });
     const action = status === LinkStatus.REVOKED ? AuditAction.LINK_REVOKE : AuditAction.LINK_UPDATE;
-    await this.audit.record({ ...ctx, action, entityType: 'access_link', entityId: id, metadata: { status } });
+    await this.audit.record({
+      ...ctx,
+      action,
+      entityType: 'delivery_link',
+      entityId: id,
+      metadata: {
+        label: link.label ?? existing.label ?? 'Untitled link',
+        contentTitle: link.content?.title ?? existing.content?.title,
+        previousStatus: existing.status,
+        status,
+      },
+    });
     return this.decorateOne(link);
   }
 
   async remove(id: string, ctx: AuditContext) {
-    await this.getById(id);
-    await this.linkRepo.delete(id);
-    await this.audit.record({ ...ctx, action: AuditAction.LINK_DELETE, entityType: 'access_link', entityId: id });
+    const existing = await this.getById(id);
+    if (existing.status === LinkStatus.DELETED) {
+      throw new BadRequestError('Link is already deleted');
+    }
+    const link = await this.linkRepo.update(id, {
+      status: LinkStatus.DELETED,
+      revokedAt: new Date(),
+    });
+    await this.audit.record({
+      ...ctx,
+      action: AuditAction.LINK_DELETE,
+      entityType: 'delivery_link',
+      entityId: id,
+      metadata: {
+        label: link.label ?? existing.label ?? 'Untitled link',
+        contentTitle: link.content?.title ?? existing.content?.title,
+        previousStatus: existing.status,
+      },
+    });
+    return this.decorateOne(link);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -90,9 +90,11 @@ export class StreamingService {
   async resolvePublicLink(token: string) {
     const link = await this.linkRepo.findByTokenHash(sha256(token));
     if (!link) throw new NotFoundError('This link does not exist');
+    const status =
+      link.status === LinkStatus.DELETED ? LinkStatus.REVOKED : this.effectiveStatus(link);
     return {
       label: link.label,
-      status: this.effectiveStatus(link),
+      status,
       requiresPassword: Boolean(link.passwordHash),
       neverExpire: link.neverExpire,
       expiresAt: link.expiresAt,
@@ -101,6 +103,7 @@ export class StreamingService {
   }
 
   private effectiveStatus(link: AccessLink): LinkStatus {
+    if (link.status === LinkStatus.DELETED) return LinkStatus.REVOKED;
     if (link.status !== LinkStatus.ACTIVE) return link.status;
     if (!link.neverExpire && link.expiresAt && link.expiresAt.getTime() < Date.now()) {
       return LinkStatus.EXPIRED;
@@ -119,17 +122,26 @@ export class StreamingService {
     const deny = async (reason: string, code: string) => {
       await this.audit.record({
         action: AuditAction.ACCESS_DENIED,
-        entityType: 'access_link',
+        entityType: 'delivery_link',
         entityId: link.id,
         ipAddress: viewer.ip,
         userAgent: viewer.userAgent,
-        metadata: { reason },
+        metadata: {
+          reason,
+          code,
+          label: link.label ?? 'Untitled link',
+          contentTitle: link.content.title,
+          fileType: link.content.fileType,
+        },
       });
       throw new AccessDeniedError(reason, code);
     };
 
     // --- status / expiration ---
     const kind = contentKindLabel(link.content.fileType);
+    if (link.status === LinkStatus.DELETED) {
+      return deny(`This ${kind} link has been deleted and is no longer available.`, 'LINK_REVOKED');
+    }
     if (link.status === LinkStatus.REVOKED) {
       return deny(`This ${kind} has been revoked and is no longer available.`, 'LINK_REVOKED');
     }
@@ -253,10 +265,16 @@ export class StreamingService {
     const updated = await this.linkRepo.incrementViewCount(link.id);
     await this.audit.record({
       action: AuditAction.LINK_ACCESS,
-      entityType: 'access_link',
+      entityType: 'delivery_link',
       entityId: link.id,
       ipAddress: viewer.ip,
       userAgent: viewer.userAgent,
+      metadata: {
+        label: link.label ?? 'Untitled link',
+        contentTitle: link.content.title,
+        fileType: link.content.fileType,
+        viewCount: updated.viewCount,
+      },
     });
     await this.notifications.evaluateViewThresholds(updated);
 

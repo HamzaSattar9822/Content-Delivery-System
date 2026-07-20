@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuditAction } from '@prisma/client';
 import { container } from '../container';
 import { ok, parsePagination, buildPaginated } from '../utils/http';
+import { presentAuditLog } from '../utils/audit-format';
 
 const { auditService } = container.services;
 
@@ -20,6 +21,6 @@ export const auditController = {
       from: from && !Number.isNaN(from.getTime()) ? from : undefined,
       to: to && !Number.isNaN(to.getTime()) ? to : undefined,
     });
-    ok(res, buildPaginated(data, total, { page, pageSize }));
+    ok(res, buildPaginated(data.map((row) => presentAuditLog(row)), total, { page, pageSize }));
   },
 };
