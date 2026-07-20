@@ -4,26 +4,67 @@
 
 :root {
   color-scheme: light;
+  --cds-canvas: #f3f6f8;
+  --cds-surface: #ffffff;
+  --cds-elevated: #ffffff;
+  --cds-ink: #0f172a;
+  --cds-muted: #64748b;
+  --cds-line: #e2e8f0;
+  --cds-subtle: #eef3f6;
+  --cds-accent: #0f766e;
+  --cds-accent-fg: #ffffff;
+  --cds-accent-soft: #ccfbf1;
+  --cds-danger: #b91c1c;
+  --cds-danger-soft: #fee2e2;
+  --cds-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+html.dark {
+  color-scheme: dark;
+  --cds-canvas: #0b1220;
+  --cds-surface: #121a2b;
+  --cds-elevated: #182235;
+  --cds-ink: #e8eef7;
+  --cds-muted: #94a3b8;
+  --cds-line: #243044;
+  --cds-subtle: #1a2438;
+  --cds-accent: #2dd4bf;
+  --cds-accent-fg: #042f2e;
+  --cds-accent-soft: rgba(45, 212, 191, 0.14);
+  --cds-danger: #f87171;
+  --cds-danger-soft: rgba(248, 113, 113, 0.16);
+  --cds-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.28);
 }
 
 html,
 body {
-  background-color: #ffffff;
-  color: #111111;
+  background-color: var(--cds-canvas);
+  color: var(--cds-ink);
   -webkit-font-smoothing: antialiased;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-cds), system-ui, sans-serif;
+  min-height: 100%;
 }
 
 * {
   box-sizing: border-box;
 }
 
-/* Consistent focus ring without colourful accents. */
+::selection {
+  background: var(--cds-accent-soft);
+  color: var(--cds-ink);
+}
+
 :focus-visible {
-  outline: 2px solid #111111;
-  outline-offset: 1px;
+  outline: 2px solid var(--cds-accent);
+  outline-offset: 2px;
 }
 
 table {
   border-collapse: collapse;
+}
+
+/* Smooth theme transitions for chrome surfaces */
+body,
+.cds-theme-transition {
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
 }

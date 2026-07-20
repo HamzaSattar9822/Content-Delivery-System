@@ -133,8 +133,8 @@ export function DriveBrowser({
         </div>
       </div>
 
-      <div className={`border border-line rounded overflow-y-auto ${maxHeightClassName}`}>
-        {error && <div className="p-3 text-sm text-ink">{error}</div>}
+      <div className={`border border-line rounded-xl overflow-y-auto bg-elevated ${maxHeightClassName}`}>
+        {error && <div className="p-3 text-sm text-danger">{error}</div>}
         {loading ? (
           <div className="p-4 text-sm text-muted">Loading Drive…</div>
         ) : files.length === 0 ? (
@@ -147,7 +147,9 @@ export function DriveBrowser({
               return (
                 <li
                   key={file.id}
-                  className={`flex items-center gap-3 px-3 py-2 text-sm ${selected ? 'bg-subtle' : ''}`}
+                  className={`flex items-center gap-3 px-3 py-2.5 text-sm transition-colors ${
+                    selected ? 'bg-accent-soft' : 'hover:bg-subtle/70'
+                  }`}
                 >
                   {file.thumbnailLink && !file.isFolder ? (
                     // eslint-disable-next-line @next/next/no-img-element

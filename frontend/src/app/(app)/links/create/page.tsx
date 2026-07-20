@@ -159,7 +159,7 @@ function CreateLinkForm() {
               value={created.embedCode}
               onFocus={(e) => e.currentTarget.select()}
               rows={5}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-sm font-mono text-ink"
+              className="w-full rounded-lg border border-line bg-elevated px-3 py-2 text-sm font-mono text-ink"
             />
           </Field>
           <div className="flex flex-wrap gap-2 mt-3">
@@ -371,8 +371,8 @@ function SourceTab({
     <button
       type="button"
       onClick={onClick}
-      className={`px-3 py-2 text-sm border-b-2 -mb-px ${
-        active ? 'border-ink text-ink font-medium' : 'border-transparent text-muted hover:text-ink'
+      className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
+        active ? 'border-accent text-accent font-medium' : 'border-transparent text-muted hover:text-ink'
       }`}
     >
       {children}

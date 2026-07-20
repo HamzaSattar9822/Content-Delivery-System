@@ -31,8 +31,8 @@ function Breakdown({ title, items }: { title: string; items: { key: string; coun
                   <span>{i.key}</span>
                   <span className="text-muted">{i.count}</span>
                 </div>
-                <div className="h-1.5 bg-subtle border border-line rounded mt-1">
-                  <div className="h-full bg-ink" style={{ width: `${(i.count / total) * 100}%` }} />
+                <div className="h-1.5 bg-subtle border border-line rounded-full mt-1 overflow-hidden">
+                  <div className="h-full bg-accent rounded-full" style={{ width: `${(i.count / total) * 100}%` }} />
                 </div>
               </li>
             ))}

@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { Spinner } from '@/components/ui';
+import { useTheme } from '@/lib/theme';
+import { Button, Spinner } from '@/components/ui';
 
 interface NavItem {
   href: string;
@@ -26,6 +27,7 @@ const NAV: NavItem[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, logout, hasPermission } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -36,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-canvas">
         <Spinner />
       </div>
     );
@@ -50,25 +52,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="md:w-60 border-b md:border-b-0 md:border-r border-line bg-white shrink-0">
-        <div className="px-4 py-4 border-b border-line flex items-center justify-between">
-          <span className="text-sm font-semibold text-ink">Content Delivery System</span>
-          <button className="md:hidden text-xs text-muted" onClick={() => setMenuOpen((v) => !v)}>
+    <div className="min-h-screen flex flex-col md:flex-row bg-canvas cds-theme-transition">
+      <aside className="md:w-64 border-b md:border-b-0 md:border-r border-line bg-surface shrink-0 shadow-panel md:shadow-none">
+        <div className="px-4 py-4 border-b border-line flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-accent-fg text-xs font-bold">
+                CDS
+              </span>
+              <span className="text-sm font-semibold text-ink truncate">Content Delivery</span>
+            </div>
+          </div>
+          <button
+            className="md:hidden text-xs text-muted border border-line rounded-lg px-2 py-1 hover:bg-subtle"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
             Menu
           </button>
         </div>
-        <nav className={`${menuOpen ? 'block' : 'hidden'} md:block p-2`}>
+        <nav className={`${menuOpen ? 'block' : 'hidden'} md:block p-3 space-y-0.5`}>
           {items.map((item) => {
-            const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+            const active =
+              pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setMenuOpen(false)}
-                className={`block px-3 py-2 text-sm rounded mb-0.5 border ${
-                  active ? 'border-line bg-subtle text-ink font-medium' : 'border-transparent text-muted hover:bg-subtle hover:text-ink'
+                className={`block px-3 py-2 text-sm rounded-lg transition-colors ${
+                  active
+                    ? 'bg-accent-soft text-accent font-medium'
+                    : 'text-muted hover:bg-subtle hover:text-ink'
                 }`}
               >
                 {item.label}
@@ -78,18 +92,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="border-b border-line bg-white px-4 md:px-6 py-3 flex items-center justify-between">
+        <header className="border-b border-line bg-surface/90 backdrop-blur px-4 md:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-20">
           <div className="text-sm text-muted truncate">{user.email}</div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs border border-line rounded px-2 py-0.5 text-muted">{user.role}</span>
-            <button onClick={handleLogout} className="text-sm text-ink hover:underline">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden sm:inline-flex text-[11px] border border-line rounded-md px-2 py-1 text-muted bg-subtle">
+              {user.role}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              className="!px-2.5 !py-1.5"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            >
+              {theme === 'dark' ? 'Light' : 'Dark'}
+            </Button>
+            <Button type="button" variant="secondary" className="!px-2.5 !py-1.5" onClick={handleLogout}>
               Sign out
-            </button>
+            </Button>
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6 bg-white">{children}</main>
+        <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

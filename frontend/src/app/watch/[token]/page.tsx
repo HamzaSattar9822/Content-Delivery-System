@@ -84,7 +84,7 @@ export default function WatchPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="min-h-screen flex items-center justify-center bg-canvas">
           <Spinner />
         </div>
       }
@@ -144,7 +144,7 @@ function WatchPageContent() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isEmbed ? 'bg-black' : 'bg-white'}`}>
+      <div className={`min-h-screen flex items-center justify-center ${isEmbed ? 'bg-black' : 'bg-canvas'}`}>
         <Spinner />
       </div>
     );
@@ -163,11 +163,14 @@ function WatchPageContent() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col ${isEmbed ? 'bg-black' : 'bg-white'}`}
+      className={`min-h-screen flex flex-col ${isEmbed ? 'bg-black' : 'bg-canvas'}`}
       onContextMenu={(e) => e.preventDefault()}
     >
       {!isEmbed && (
-        <header className="border-b border-line px-4 py-3">
+        <header className="border-b border-line bg-surface/90 backdrop-blur px-4 py-3 flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-accent text-accent-fg text-[10px] font-bold">
+            CDS
+          </span>
           <span className="text-sm font-semibold text-ink">Content Delivery System</span>
         </header>
       )}
@@ -182,7 +185,7 @@ function WatchPageContent() {
         )}
 
         {resolved && resolved.status === 'ACTIVE' && resolved.requiresPassword && !access && (
-          <Card className={`p-6 max-w-md ${isEmbed ? 'mx-auto mt-4 bg-white' : 'mx-auto'}`}>
+          <Card className={`p-6 max-w-md ${isEmbed ? 'mx-auto mt-4' : 'mx-auto'}`}>
             <h1 className="text-base font-semibold text-ink mb-1">{resolved.content.title}</h1>
             <p className="text-sm text-muted mb-4">This content is password protected.</p>
             {error && !statusUi && <Banner tone="error">{error}</Banner>}
@@ -243,7 +246,7 @@ function WatchPageContent() {
 
 function StatusCard({ embed, title, message }: { embed: boolean; title: string; message: string }) {
   return (
-    <Card className={`p-8 text-center ${embed ? 'm-4 bg-white' : ''}`}>
+    <Card className={`p-8 text-center ${embed ? 'm-4' : ''}`}>
       <h1 className="text-lg font-semibold text-ink mb-2">{title}</h1>
       <p className="text-sm text-muted">{message}</p>
     </Card>
@@ -310,7 +313,7 @@ function ContentViewer({
         data={pdfSrc}
         type="application/pdf"
         title={access.content.title}
-        className={embed ? 'w-full h-screen border-0 bg-white' : 'w-full border border-line rounded h-[80vh] bg-white'}
+        className={embed ? 'w-full h-screen border-0 bg-surface' : 'w-full border border-line rounded-xl h-[80vh] bg-surface'}
       >
         <iframe
           src={pdfSrc}

@@ -1,22 +1,36 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * Minimal monochrome SaaS palette: white background, black text, grey borders.
- * No gradients, no colourful accents.
+ * CDS theme: slate structure + teal accent.
+ * Colors resolve from CSS variables so light/dark modes stay in sync.
  */
 const config: Config = {
+  darkMode: 'class',
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        ink: '#111111',
-        muted: '#6b7280',
-        line: '#e5e7eb',
-        surface: '#ffffff',
-        subtle: '#f9fafb',
+        canvas: 'var(--cds-canvas)',
+        surface: 'var(--cds-surface)',
+        elevated: 'var(--cds-elevated)',
+        ink: 'var(--cds-ink)',
+        muted: 'var(--cds-muted)',
+        line: 'var(--cds-line)',
+        subtle: 'var(--cds-subtle)',
+        accent: 'var(--cds-accent)',
+        'accent-fg': 'var(--cds-accent-fg)',
+        'accent-soft': 'var(--cds-accent-soft)',
+        danger: 'var(--cds-danger)',
+        'danger-soft': 'var(--cds-danger-soft)',
+      },
+      fontFamily: {
+        sans: ['var(--font-cds)', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        panel: 'var(--cds-shadow)',
       },
       borderRadius: {
-        DEFAULT: '6px',
+        DEFAULT: '10px',
       },
     },
   },

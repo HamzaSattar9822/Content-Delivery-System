@@ -294,8 +294,8 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`px-3 py-2 text-sm border-b-2 -mb-px ${
-        active ? 'border-ink text-ink font-medium' : 'border-transparent text-muted hover:text-ink'
+      className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
+        active ? 'border-accent text-accent font-medium' : 'border-transparent text-muted hover:text-ink'
       }`}
     >
       {children}

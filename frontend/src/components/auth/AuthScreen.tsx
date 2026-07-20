@@ -7,6 +7,7 @@ import { API_URL } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { authClient } from '@/lib/auth-client';
 import { Banner, Button, Card, Field, Input } from '@/components/ui';
+import { useTheme } from '@/lib/theme';
 
 export interface AuthConfig {
   googleOauthConfigured: boolean;
@@ -105,20 +106,36 @@ interface AuthShellProps {
 }
 
 export function AuthShell({ title, subtitle, footer, children }: AuthShellProps) {
+  const { theme, toggleTheme } = useTheme();
   const apiWarning =
     typeof window !== 'undefined' &&
     !['localhost', '127.0.0.1'].includes(window.location.hostname) &&
     (API_URL.includes('localhost') || API_URL.includes('127.0.0.1'));
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-white">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <h1 className="text-lg font-semibold text-ink">Content Delivery System</h1>
-          <p className="text-sm text-muted mt-1">{subtitle}</p>
+    <div className="min-h-screen flex items-center justify-center px-4 bg-canvas relative overflow-hidden cds-theme-transition">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--cds-accent-soft),_transparent_55%)]" />
+      <div className="absolute top-4 right-4 z-10">
+        <Button
+          type="button"
+          variant="ghost"
+          className="!px-2.5 !py-1.5"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? 'Light' : 'Dark'}
+        </Button>
+      </div>
+      <div className="w-full max-w-md relative">
+        <div className="mb-8 text-center">
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-fg text-sm font-bold mb-3">
+            CDS
+          </div>
+          <h1 className="text-2xl font-semibold text-ink tracking-tight">Content Delivery System</h1>
+          <p className="text-sm text-muted mt-2 leading-relaxed">{subtitle}</p>
         </div>
 
-        <Card className="p-5">
+        <Card className="p-6">
           <h2 className="text-base font-semibold text-ink mb-4">{title}</h2>
           {apiWarning && (
             <div className="mb-3">
@@ -130,7 +147,7 @@ export function AuthShell({ title, subtitle, footer, children }: AuthShellProps)
           {children}
         </Card>
 
-        <div className="mt-4 text-center text-sm text-muted">{footer}</div>
+        <div className="mt-5 text-center text-sm text-muted">{footer}</div>
       </div>
     </div>
   );
@@ -247,7 +264,7 @@ export function submitAuthForm(
 
 export function AuthPageLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="text-ink underline underline-offset-2 hover:no-underline">
+    <Link href={href} className="text-accent font-medium underline underline-offset-2 hover:no-underline">
       {children}
     </Link>
   );
