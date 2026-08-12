@@ -123,11 +123,18 @@ export class AnalyticsService {
         : {}),
     };
 
+    const sessionWhere = {
+      ...(filter.linkId ? { linkId: filter.linkId } : {}),
+      ...(filter.from || filter.to
+        ? { startedAt: { ...(filter.from ? { gte: filter.from } : {}), ...(filter.to ? { lte: filter.to } : {}) } }
+        : {}),
+    };
+
     const [totalViews, viewers, sessions, durationAgg, completed, deviceTypes, browsers, countries, viewsWithContent] =
       await Promise.all([
         this.db.viewLog.count({ where }),
         this.db.viewLog.findMany({ where, select: { ipAddress: true } }),
-        this.db.session.count({ where: filter.linkId ? { linkId: filter.linkId } : {} }),
+        this.db.session.count({ where: sessionWhere }),
         this.db.viewLog.aggregate({ where, _avg: { watchSeconds: true }, _sum: { watchSeconds: true } }),
         this.db.viewLog.count({ where: { ...where, completed: true } }),
         this.db.viewLog.groupBy({ by: ['deviceType'], where, _count: true }),
