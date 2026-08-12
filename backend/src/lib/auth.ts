@@ -80,6 +80,11 @@ async function createAuth() {
     },
 
     advanced: {
+      // Match Prisma `@default(uuid())` so Better Auth–created users (Google,
+      // credential) get UUID ids compatible with existing route validators.
+      database: {
+        generateId: 'uuid',
+      },
       // Frontend (Vercel) and backend (Render) are different sites. Cross-site
       // cookies need SameSite=None; Secure. Key off COOKIE_SECURE / public HTTPS
       // URLs — not NODE_ENV — because Render often runs with NODE_ENV unset or

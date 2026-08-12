@@ -164,4 +164,4 @@ export const heartbeatSchema = z.object({
   event: z.enum(['play', 'pause', 'stop', 'progress', 'ended', 'replay']).optional(),
 });
 
-export const idParam = z.object({ id: z.string().uuid() });
+export const idParam = z.object({ id: z.string().min(1).max(128) });
