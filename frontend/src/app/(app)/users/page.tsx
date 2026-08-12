@@ -155,7 +155,10 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             ))}
           </Select>
         </Field>
-        <p className="text-xs text-muted">The user signs in with Google using this email address.</p>
+        <p className="text-xs text-muted">
+          The user will sign in using email/password.
+          A SUPER_ADMIN will assign their password after creating the user.
+        </p>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose}>
             Cancel
