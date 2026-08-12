@@ -117,6 +117,10 @@ export const updateUserSchema = z.object({
   status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
 });
 
+export const setUserPasswordSchema = z.object({
+  password: z.string().min(8, 'Password must be at least 8 characters').max(128),
+});
+
 // --- Notifications ---
 const notificationTypeEnum = z.enum([
   'VIEW_THRESHOLD',

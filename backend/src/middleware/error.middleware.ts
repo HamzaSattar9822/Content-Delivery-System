@@ -36,6 +36,16 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Record not found' } });
       return;
     }
+    if (err.code === 'P2003') {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'Cannot delete this record because related data still references it',
+        },
+      });
+      return;
+    }
   }
 
   logger.error({ err }, 'Unhandled error');

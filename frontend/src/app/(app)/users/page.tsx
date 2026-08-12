@@ -12,17 +12,21 @@ const ROLES: RoleName[] = ['SUPER_ADMIN', 'CONTENT_MANAGER', 'READ_ONLY'];
 export default function UsersPage() {
   const { hasPermission, user: current } = useAuth();
   const canManage = hasPermission('user:manage');
+  const isSuperAdmin = current?.role === 'SUPER_ADMIN';
 
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [setPasswordUser, setSetPasswordUser] = useState<UserRecord | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.get<Paginated<UserRecord>>('/users', { pageSize: 100 });
       setUsers(data.data);
+      setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load users');
     } finally {
@@ -35,19 +39,40 @@ export default function UsersPage() {
   }, [load]);
 
   const updateRole = async (id: string, roleName: string) => {
-    await api.patch(`/users/${id}`, { roleName });
-    void load();
+    setError(null);
+    try {
+      await api.patch(`/users/${id}`, { roleName });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to update role');
+    }
   };
 
   const toggleStatus = async (u: UserRecord) => {
-    await api.patch(`/users/${u.id}`, { status: u.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' });
-    void load();
+    setError(null);
+    try {
+      await api.patch(`/users/${u.id}`, { status: u.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to update status');
+    }
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this user?')) return;
-    await api.delete(`/users/${id}`);
-    void load();
+    if (!confirm('Delete this user? This cannot be undone.')) return;
+    setError(null);
+    setDeletingId(id);
+    try {
+      await api.delete(`/users/${id}`);
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      await load();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Failed to delete user';
+      await load();
+      setError(message);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -89,11 +114,20 @@ export default function UsersPage() {
               <td className="px-4 py-2 text-right whitespace-nowrap">
                 {canManage && u.id !== current?.id && (
                   <>
+                    {isSuperAdmin && (
+                      <button onClick={() => setSetPasswordUser(u)} className="text-sm text-ink hover:underline mr-3">
+                        Set Password
+                      </button>
+                    )}
                     <button onClick={() => toggleStatus(u)} className="text-sm text-ink hover:underline mr-3">
                       {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
                     </button>
-                    <button onClick={() => remove(u.id)} className="text-sm text-ink hover:underline">
-                      Delete
+                    <button
+                      onClick={() => void remove(u.id)}
+                      disabled={deletingId === u.id}
+                      className="text-sm text-ink hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {deletingId === u.id ? 'Deleting…' : 'Delete'}
                     </button>
                   </>
                 )}
@@ -109,6 +143,16 @@ export default function UsersPage() {
           onCreated={() => {
             setShowCreate(false);
             void load();
+          }}
+        />
+      )}
+
+      {setPasswordUser && (
+        <SetPasswordModal
+          user={setPasswordUser}
+          onClose={() => setSetPasswordUser(null)}
+          onSaved={() => {
+            setSetPasswordUser(null);
           }}
         />
       )}
@@ -165,6 +209,75 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
           </Button>
           <Button onClick={submit} disabled={saving || !email}>
             {saving ? 'Saving...' : 'Create User'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SetPasswordModal({
+  user,
+  onClose,
+  onSaved,
+}: {
+  user: UserRecord;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setError(null);
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api.post(`/users/${user.id}/password`, { password });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to set password');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title={`Set Password: ${user.email}`}>
+      {error && <Banner tone="error">{error}</Banner>}
+      <div className="space-y-3">
+        <Field label="New password">
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 8 characters"
+          />
+        </Field>
+        <Field label="Confirm password">
+          <Input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Repeat password"
+          />
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={saving || !password || !confirmPassword}>
+            {saving ? 'Saving...' : 'Set Password'}
           </Button>
         </div>
       </div>

@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { userController } from '../controllers/user.controller';
-import { authenticate, requirePermissions } from '../middleware/auth.middleware';
+import { authenticate, requirePermissions, requireRole } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { validate } from '../middleware/validate';
-import { PERMISSIONS } from '../config/permissions';
-import { createUserSchema, idParam, updateUserSchema } from '../validation/schemas';
+import { PERMISSIONS, ROLES } from '../config/permissions';
+import { createUserSchema, idParam, setUserPasswordSchema, updateUserSchema } from '../validation/schemas';
 
 export const userRoutes = Router();
 
@@ -20,5 +20,12 @@ userRoutes.patch(
   validate(idParam, 'params'),
   validate(updateUserSchema),
   asyncHandler(userController.update),
+);
+userRoutes.post(
+  '/:id/password',
+  requireRole(ROLES.SUPER_ADMIN),
+  validate(idParam, 'params'),
+  validate(setUserPasswordSchema),
+  asyncHandler(userController.setPassword),
 );
 userRoutes.delete('/:id', requirePermissions(PERMISSIONS.USER_MANAGE), validate(idParam, 'params'), asyncHandler(userController.remove));

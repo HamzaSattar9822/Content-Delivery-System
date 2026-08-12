@@ -1,9 +1,14 @@
-import { AuditAction, UserStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { AuditAction, Prisma, UserStatus } from '@prisma/client';
+import { prisma } from '../db/prisma';
 import { RoleRepository } from '../repositories/role.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../utils/errors';
 import { parsePagination, buildPaginated } from '../utils/http';
+import { importEsm } from '../lib/esm';
 import { AuditService, AuditContext } from './audit.service';
+
+type CryptoModule = { hashPassword: (password: string) => Promise<string> };
 
 export class UserService {
   constructor(
@@ -83,7 +88,30 @@ export class UserService {
   async remove(id: string, ctx: AuditContext) {
     if (ctx.userId === id) throw new ForbiddenError('You cannot delete your own account');
     const existing = await this.getById(id);
-    await this.userRepo.delete(id);
+
+    try {
+      // Clear Better Auth rows first so a partial FK failure never leaves a
+      // half-deleted identity that can resurface after refresh.
+      await prisma.$transaction([
+        prisma.authSession.deleteMany({ where: { userId: id } }),
+        prisma.account.deleteMany({ where: { userId: id } }),
+        prisma.refreshToken.deleteMany({ where: { userId: id } }),
+        prisma.user.delete({ where: { id } }),
+      ]);
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2003') {
+          throw new ConflictError(
+            'This user cannot be deleted because related records still reference them. Suspend the account instead.',
+          );
+        }
+        if (err.code === 'P2025') {
+          throw new NotFoundError('User not found');
+        }
+      }
+      throw err;
+    }
+
     await this.audit.record({
       ...ctx,
       action: AuditAction.USER_DELETE,
@@ -91,6 +119,46 @@ export class UserService {
       entityId: id,
       metadata: { email: existing.email, name: existing.name },
     });
+  }
+
+  async setPassword(id: string, input: { password: string }, ctx: AuditContext) {
+    const user = await this.getById(id);
+    const { hashPassword } = await importEsm<CryptoModule>('better-auth/crypto');
+    const hashedPassword = await hashPassword(input.password);
+
+    const credential = await prisma.account.findFirst({
+      where: { userId: user.id, providerId: 'credential' },
+    });
+
+    if (!credential) {
+      await prisma.account.create({
+        data: {
+          id: randomUUID(),
+          accountId: user.id,
+          providerId: 'credential',
+          userId: user.id,
+          password: hashedPassword,
+        },
+      });
+    } else {
+      await prisma.account.update({
+        where: { id: credential.id },
+        data: { password: hashedPassword },
+      });
+    }
+
+    await this.audit.record({
+      ...ctx,
+      action: AuditAction.USER_UPDATE,
+      entityType: 'user',
+      entityId: user.id,
+      metadata: {
+        email: user.email,
+        changes: ['password'],
+      },
+    });
+
+    return { updated: true };
   }
 
   listRoles() {

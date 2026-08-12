@@ -18,6 +18,9 @@ export const userController = {
   async update(req: Request, res: Response): Promise<void> {
     ok(res, await userService.update(req.params.id, req.body, auditContext(req)));
   },
+  async setPassword(req: Request, res: Response): Promise<void> {
+    ok(res, await userService.setPassword(req.params.id, req.body, auditContext(req)));
+  },
   async remove(req: Request, res: Response): Promise<void> {
     await userService.remove(req.params.id, auditContext(req));
     noContent(res);

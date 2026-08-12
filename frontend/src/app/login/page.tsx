@@ -8,7 +8,6 @@ import { Button, Field, Input } from '@/components/ui';
 import {
   AuthDivider,
   AuthFormError,
-  AuthPageLink,
   AuthShell,
   GoogleSignInButton,
   PasswordFields,
@@ -52,15 +51,7 @@ export default function LoginPage() {
   const displayError = error ?? googleError;
 
   return (
-    <AuthShell
-      title="Sign in"
-      subtitle="Sign in to manage your content."
-      footer={
-        <>
-          Don&apos;t have an account? <AuthPageLink href="/signup">Create one</AuthPageLink>
-        </>
-      }
-    >
+    <AuthShell title="Sign in" subtitle="Sign in to manage your content." footer={null}>
       <AuthFormError error={displayError} />
 
       {config.googleOauthConfigured && (

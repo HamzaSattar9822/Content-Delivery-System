@@ -37,6 +37,7 @@ async function createAuth() {
       enabled: true,
       minPasswordLength: 8,
       requireEmailVerification: false,
+      disableSignUp: true,
     },
 
     ...(googleConfigured
@@ -45,6 +46,8 @@ async function createAuth() {
             google: {
               clientId: env.GOOGLE_CLIENT_ID,
               clientSecret: env.GOOGLE_CLIENT_SECRET,
+              disableImplicitSignUp: true,
+              disableSignUp: true,
             },
           },
         }
