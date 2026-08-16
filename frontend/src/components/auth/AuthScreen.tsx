@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { API_URL } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { authClient } from '@/lib/auth-client';
-import { Banner, Button, Card, Field, Input } from '@/components/ui';
+import { Banner, Button, Card, Field, PasswordInput } from '@/components/ui';
 import { useTheme } from '@/lib/theme';
 
 export interface AuthConfig {
@@ -214,8 +214,7 @@ export function PasswordFields({
   return (
     <>
       <Field label="Password">
-        <Input
-          type="password"
+        <PasswordInput
           required
           minLength={8}
           autoComplete={showConfirm ? 'new-password' : 'current-password'}
@@ -226,8 +225,7 @@ export function PasswordFields({
       </Field>
       {showConfirm && onConfirmPasswordChange && (
         <Field label="Confirm password">
-          <Input
-            type="password"
+          <PasswordInput
             required
             minLength={8}
             autoComplete="new-password"
@@ -259,7 +257,12 @@ export function submitAuthForm(
   e.preventDefault();
   setError(null);
   setSubmitting(true);
-  void action().finally(() => setSubmitting(false));
+  void action()
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setError(message);
+    })
+    .finally(() => setSubmitting(false));
 }
 
 export function AuthPageLink({ href, children }: { href: string; children: React.ReactNode }) {

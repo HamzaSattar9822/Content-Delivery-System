@@ -38,7 +38,11 @@ export default function LoginPage() {
   const handleLogin = async () => {
     const { error: signInError } = await authClient.signIn.email({ email, password });
     if (signInError) {
-      throw new Error(signInError.message || 'Invalid email or password');
+      const raw = (signInError.message || signInError.statusText || '').toLowerCase();
+      if (raw.includes('password') || raw.includes('credential') || raw.includes('invalid') || raw.includes('unauthorized')) {
+        throw new Error('Incorrect email or password. Please try again.');
+      }
+      throw new Error(signInError.message || 'Incorrect email or password. Please try again.');
     }
     await refresh();
     router.replace('/dashboard');

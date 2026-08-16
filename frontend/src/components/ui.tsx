@@ -1,6 +1,6 @@
 'use client';
 
-import { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { useState, ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 
 function cx(...classes: (string | false | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
@@ -59,6 +59,31 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
       )}
       {...props}
     />
+  );
+}
+
+/** Password input with show/hide toggle. */
+export function PasswordInput({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        {...props}
+        type={visible ? 'text' : 'password'}
+        className={cx(
+          'w-full border border-line rounded-lg px-3 py-2 pr-16 text-sm text-ink placeholder:text-muted bg-elevated focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition-colors',
+          className,
+        )}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium text-muted hover:text-ink px-1.5 py-1 rounded"
+        aria-label={visible ? 'Hide password' : 'Show password'}
+      >
+        {visible ? 'Hide' : 'Show'}
+      </button>
+    </div>
   );
 }
 

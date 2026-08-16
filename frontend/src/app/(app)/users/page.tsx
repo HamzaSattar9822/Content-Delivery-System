@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Paginated, RoleName, UserRecord } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
-import { Badge, Banner, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, Table } from '@/components/ui';
+import { Badge, Banner, Button, Card, EmptyState, Field, Input, Modal, PageHeader, PasswordInput, Select, Spinner, Table } from '@/components/ui';
 import { formatDate } from '@/lib/format';
 
 const ROLES: RoleName[] = ['SUPER_ADMIN', 'CONTENT_MANAGER', 'READ_ONLY'];
@@ -257,19 +257,19 @@ function SetPasswordModal({
       {error && <Banner tone="error">{error}</Banner>}
       <div className="space-y-3">
         <Field label="New password">
-          <Input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="At least 8 characters"
+            autoComplete="new-password"
           />
         </Field>
         <Field label="Confirm password">
-          <Input
-            type="password"
+          <PasswordInput
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Repeat password"
+            autoComplete="new-password"
           />
         </Field>
         <div className="flex justify-end gap-2 pt-2">
